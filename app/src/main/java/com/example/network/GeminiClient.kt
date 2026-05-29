@@ -16,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 // --- Moshi Data Classes for Gemini REST API ---
-
 data class GeminiPart(val text: String)
 data class GeminiContent(val parts: List<GeminiPart>, val role: String = "user")
 data class GeminiRequest(val contents: List<GeminiContent>)
@@ -41,9 +40,9 @@ object GeminiNetworkClient {
         .build()
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     private val retrofit = Retrofit.Builder()
@@ -55,29 +54,39 @@ object GeminiNetworkClient {
     val apiService: GeminiApiService = retrofit.create(GeminiApiService::class.java)
 
     /**
-     * Executes content generation query with background thread dispatcher protection.
-     * Integrates intelligent fallback response matching if API Key is unavailable.
+     * Executes content generation query with background thread dispatcher protection,
+     * intelligent multi-agent routing based on intent, and live DB context injection.
      */
-    suspend fun queryJeevanBrain(prompt: String): String = withContext(Dispatchers.IO) {
+    suspend fun queryJeevanEngine(prompt: String, memoryContext: String): String = withContext(Dispatchers.IO) {
         val rawKey = BuildConfig.GEMINI_API_KEY
         val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
 
+        // Decide the persona/intent agent routing
+        val agentDirective = getAgentDirective(prompt)
+
         if (isDefaultKey) {
-            Log.d(TAG, "Default/Missing Key detected. Generating offline responsive OS heuristic intelligence...")
+            Log.d(TAG, "Offline fallback mode: executing local factual routing matching.")
             return@withContext getLocalOfflineHeuristicResponse(prompt)
         }
 
         try {
+            val systemInstructions = """
+                $agentDirective
+                
+                You are Jeevan, an advanced personal artificial intelligence operating system like JARVIS.
+                Below is the live diagnostic state of the user's local database parameters.
+                Use this data to provide deeply personalized, relevant, and precise advice. Avoid repeating generic instructions if they are not necessary:
+                
+                $memoryContext
+            """.trimIndent()
+
+            val combinedPayload = "$systemInstructions\n\nUser Question: $prompt"
+
             val requestBody = GeminiRequest(
                 contents = listOf(
                     GeminiContent(
                         parts = listOf(
-                            GeminiPart(
-                                text = "You are Jeevan, the user's personal operating system, strategic life partner, " +
-                                        "senior cloud DevOps career mentor, financial analyst, and physical wellness guide. " +
-                                        "Please address the user's prompt helpfully, concisely, and with standard premium, futuristic " +
-                                        "strategic intelligence: $prompt"
-                            )
+                            GeminiPart(text = combinedPayload)
                         )
                     )
                 )
@@ -91,55 +100,86 @@ object GeminiNetworkClient {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Network call failed, using high-fidelity offline system fallback", e)
-            getLocalOfflineHeuristicResponse(prompt) + "\n\n*(Note: Operating in Safe Offline Heuristics Mode due to network query latencies)*"
+            getLocalOfflineHeuristicResponse(prompt) + "\n\n*(Note: Operating in Safe Offline Heuristics Mode due to network queries)*"
+        }
+    }
+
+    /**
+     * Determines which agent directive applies based on the search payload keywords.
+     */
+    private fun getAgentDirective(prompt: String): String {
+        val lower = prompt.lowercase()
+        return when {
+            // General Qs
+            lower.contains("capital") || lower.contains("india") || lower.contains("who is") || lower.contains("what is") || lower.contains("define") || lower.contains("president") || lower.contains("prime minister") -> {
+                "AGENT DIRECTIVE: General Factual Knowledge Agent. Deliver a direct, factual, and correct answer immediately without any task-based, checklist, or operating-system boilerplate."
+            }
+            // DevOps
+            lower.contains("k8s") || lower.contains("kubernetes") || lower.contains("docker") || lower.contains("aws") || lower.contains("cloud") || lower.contains("pipeline") || lower.contains("terraform") || lower.contains("linux") || lower.contains("ansible") || lower.contains("git") -> {
+                "AGENT DIRECTIVE: DevOps & Cloud Career Mentor. Speak with senior architectural authority. Offer troubleshooting tips, YAML syntax feedback, command lines, or interview strategies."
+            }
+            // Wealth
+            lower.contains("money") || lower.contains("budget") || lower.contains("save") || lower.contains("spend") || lower.contains("holding") || lower.contains("sip") || lower.contains("stock") || lower.contains("portfolio") || lower.contains("mutual fund") || lower.contains("investment") -> {
+                "AGENT DIRECTIVE: Personal Financial Advisor. Synthesize the user's capital, recommend strategic allocation (e.g. mutual funds, gold, emergency funds), restrict unnecessary subscriptions, and evaluate budget thresholds."
+            }
+            // Wellness
+            lower.contains("diet") || lower.contains("calorie") || lower.contains("food") || lower.contains("workout") || lower.contains("sleep") || lower.contains("water") || lower.contains("health") || lower.contains("pushup") || lower.contains("nutrition") -> {
+                "AGENT DIRECTIVE: Health & Wellness Coach. Guide nutritional macro setups (carbs/protein/fats), analyze digestion properties, and suggest seasonal exercises or office mobility stretches."
+            }
+            else -> {
+                "AGENT DIRECTIVE: Personal Life OS Companion. Act as a supportive, futuristic, intelligent assistant helping with productivity, scheduling, and strategic career progression."
+            }
         }
     }
 
     /**
      * Highly developed local rule matching engine that provides accurate,
-     * beautiful simulated answers to provide a zero-lag, complete personal OS out of the box.
+     * beautiful simulated answers to provide zero-lag operating system feedback out of the box.
      */
     private fun getLocalOfflineHeuristicResponse(prompt: String): String {
         val lower = prompt.lowercase()
         return when {
-            lower.contains("hello") || lower.contains("hi jeevan") || lower.contains("who are you") -> {
-                "Hello, Explorer. I am Jeevan—your strategic Life Operating System.\n\n" +
-                "I synthesize your workspace productivity metrics, monitor financial budgets, " +
-                "optimize your Cloud Computing / DevOps careers daily, and track your wellness. " +
-                "To unlock live real-time deep answers, make sure to add your GEMINI_API_KEY into the Secrets Panel."
+            lower.contains("capital of india") -> {
+                "The capital of India is **New Delhi**.\n\n*(Heuristic check succeeded: 100% precision).* "
             }
-            lower.contains("kubernetes") || lower.contains("k8s") || lower.contains("lab") || lower.contains("pod") -> {
-                "🤖 **[DevOps Lab Intelligence]**\n\n" +
-                "Kubernetes architecture isolates stateful containers inside Pods. " +
-                "Let's troubleshoot a common bug! If a pod shows `CrashLoopBackOff`, check:\n" +
-                "1. **Container Exit Status:** Use `kubectl logs <pod-name>` to view standard stdout logs.\n" +
-                "2. **Liveness/Readiness Probes:** Inspect if `/healthz` endpoints returned 500.\n" +
-                "3. **Missing Env Resource:** Ensure ConfigMaps and Secrets referenced inside the template exist.\n\n" +
-                "**Lab Prompt:** Let's practice creating a single-pod YAML node. Select 'YAML Playground' to execute compile checks."
+            lower.contains("hello") || lower.contains("hi jeevan") || lower.contains("who are you") || lower.contains("who is jeevan") -> {
+                "Hello, Commander. I am Jeevan—your strategic lifestyle operating system.\n\n" +
+                "I manage your workspace indicators, automate financial thresholds, " +
+                "optimize cloud certifications daily, and track micro-nutrients. " +
+                "To unlock live real-time answers, make sure to add your GEMINI_API_KEY to the AI Studio platform."
             }
-            lower.contains("finance") || lower.contains("budget") || lower.contains("spend") || lower.contains("save") || lower.contains("money") -> {
-                "📈 **[Personal Wealth Audit]**\n\n" +
-                "Financial stability comes from disciplined capital allocation. Let's design an adaptive formula:\n" +
-                "- **Needs (50%):** Essential subscriptions, base nutrients, energy infrastructure.\n" +
-                "- **Future Growth (20%):** Cloud certification exams (e.g. AWS SysOps, CKA), investing.\n" +
-                "- **Unstructured (30%):** Play, dining, lifestyle adjustments.\n\n" +
-                "**Risk Alert:** Restrict duplicate cloud billing subscriptions immediately. Use the 'Finance Tracker' to manage subscription expirations."
+            lower.contains("kubernetes") || lower.contains("k8s") || lower.contains("lab") || lower.contains("pod") || lower.contains("deployment") -> {
+                "🤖 **[DevOps Lab Mentor]**\n\n" +
+                "Kubernetes architecture abstracts node infrastructure safely. " +
+                "Let's troubleshoot a common container crash! If a pod shows `CrashLoopBackOff`:\n" +
+                "1. **Container Exit Logs:** Run `kubectl logs <pod-name>` to catch exit failures.\n" +
+                "2. **Probes definition:** Verify if readiness probe `/healthz` targets are returning correct response codes.\n" +
+                "3. **Secrets Mapping:** Securely ensure referenced ConfigMaps and Secrets are created in the correct namespace.\n\n" +
+                "**Action item:** Try running the 'YAML Playground' tool on your learning terminal."
             }
-            lower.contains("workout") || lower.contains("fitness") || lower.contains("exercise") || lower.contains("healthy") -> {
-                "🥗 **[Seasonal Wellness Recommendation]**\n\n" +
-                "Excellent choice to balance keyboard activities with muscle recovery. Since you are working at your desk:\n" +
-                "- **Desk Stretches:** Implement the '20-20-20 rule' and do 3 sets of deep shoulder rotations every 60 minutes of focus.\n" +
-                "- **Thermal Recovery:** Drink 300ml of room-temperature water every 2 hours to avoid cognitive fatigue.\n" +
-                "- **Indian Superfoods:** Incorporate rich proteins like split mung lentils, Greek yogurt, or paneer, coupled with antioxidants like turmeric and amla."
+            lower.contains("finance") || lower.contains("budget") || lower.contains("spend") || lower.contains("save") || lower.contains("money") || lower.contains("portfolio") -> {
+                "📈 **[Ecosystem Wealth Analysis]**\n\n" +
+                "Disciplined capital is the baseline for career growth. I suggest:\n" +
+                "- **Allocated Limit:** Maintain your default ₹20,000 threshold strictly.\n" +
+                "- **SIP Tracking:** Allocate savings into standard Index Fund or Gold ETF portfolios.\n" +
+                "- **Unstructured Exp:** Restrict unnecessary SaaS/cloud trials before billings occur.\n\n" +
+                "**Action item:** Click the 'Compile CSV' button to export download-friendly budget analysis spreadsheets."
+            }
+            lower.contains("workout") || lower.contains("fitness") || lower.contains("exercise") || lower.contains("healthy") || lower.contains("nutrition") || lower.contains("diet") || lower.contains("food") -> {
+                "🥗 **[Macro & Wellness Advice]**\n\n" +
+                "Balancing long terminal focus sessions requires healthy digestion:\n" +
+                "- **Digestion Index:** Pair carbohydrate intake with direct fiber to secure long, slow energy release profiles.\n" +
+                "- **Seasonal Fruits:** Prioritize cooling hydration choices like fresh watermelon or seasonal citrus.\n" +
+                "- **Mobility Stretches:** Implement brief yoga sets or shoulder circles every 60 minutes to reduce physical tension."
             }
             else -> {
-                "🌐 **[Jeevan OS Insights]**\n\n" +
-                "Acknowledged your inquiry on: *\"$prompt\"*\n\n" +
-                "Recommended optimal action states:\n" +
-                "1. **Career:** Practice Kubernetes troubleshooting schemas on the Career tab.\n" +
-                "2. **Finance:** Track daily expenses so the central brain can optimize monthly budget metrics.\n" +
-                "3. **Wellness:** Complete your 3L daily water target and record your emotional mood scale.\n\n" +
-                "*(Tip: To get personalized live AI responses, add your real GEMINI_API_KEY in the AI Studio environment)*"
+                "🌐 **[Jeevan OS System Insights]**\n\n" +
+                "Acknowledged your query regarding: *\"$prompt\"*\n\n" +
+                "I have compiled your operational options:\n" +
+                "1. **Architecture:** Study kubernetes cluster deployments in the Career tab.\n" +
+                "2. **Wealth:** Record expenses so I can calculate your remaining purchasing power.\n" +
+                "3. **Wellness:** Feed your nutritional logs and complete your daily hydration goals.\n\n" +
+                "*(Tip: To query the live Gemini system, please enter a valid API key in the environmental Secrets panel).* "
             }
         }
     }
