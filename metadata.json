@@ -1,0 +1,6 @@
+{
+  "name": "Jeevan",
+  "description": "A futuristic AI-powered lifestyle super app and personal operating system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
