@@ -1,10 +1,7 @@
 package com.example.data.repository
 
 import com.example.data.dao.JeevanDao
-import com.example.data.entity.Transaction
-import com.example.data.entity.CareerProgress
-import com.example.data.entity.HealthLog
-import com.example.data.entity.UserProfile
+import com.example.data.entity.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -19,22 +16,33 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
     val allCareerProgress: Flow<List<CareerProgress>> = jeevanDao.getAllCareerProgressFlow()
     val allHealthLogs: Flow<List<HealthLog>> = jeevanDao.getAllHealthLogsFlow()
     val userProfile: Flow<UserProfile?> = jeevanDao.getUserProfileFlow()
+    val allSubtopicProgress: Flow<List<SubtopicProgress>> = jeevanDao.getAllSubtopicProgressFlow()
+    val allNewsBookmarks: Flow<List<NewsBookmark>> = jeevanDao.getAllNewsBookmarksFlow()
+    val allPortfolioHoldings: Flow<List<PortfolioHolding>> = jeevanDao.getAllPortfolioHoldingsFlow()
+    val allCareerGoalFunds: Flow<List<CareerGoalFund>> = jeevanDao.getAllCareerGoalFundsFlow()
 
     // --- Profile Management ---
     suspend fun getOrInitUserProfile(): UserProfile = withContext(Dispatchers.IO) {
         val existing = jeevanDao.getUserProfileDirect()
         if (existing != null) {
-            existing
+            if (existing.balanceAmount > 100000.0) {
+                val diff = 125000.0 - existing.balanceAmount
+                val corrected = existing.copy(balanceAmount = 20000.0 - diff)
+                jeevanDao.insertUserProfile(corrected)
+                corrected
+            } else {
+                existing
+            }
         } else {
             val initial = UserProfile(
                 id = 1,
                 name = "Jeevan Explorer",
-                jobTarget = "Cloud Platform Engineer",
-                monthlyBudgetLimit = 45000.0,
+                jobTarget = "DevOps Engineer",
+                monthlyBudgetLimit = 20000.0, // Default requested capital ₹20,000
                 dailyWaterGoalMl = 3000,
-                dailyStepGoal = 9000,
+                dailyStepGoal = 8000,
                 careerStreak = 3,
-                balanceAmount = 84200.0
+                balanceAmount = 20000.0
             )
             jeevanDao.insertUserProfile(initial)
             initial
@@ -86,7 +94,7 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             ?: CareerProgress(topicId = topicId, level = 1, xp = 0)
         
         val newXp = existing.xp + xpToAdd
-        // Standard level progression algorithm: 100 XP per level
+        // Standard level progression: 100 XP per level
         val newLevel = (newXp / 100) + 1
         
         val updated = existing.copy(
@@ -113,7 +121,7 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
                 lastActiveTime = System.currentTimeMillis()
             )
             jeevanDao.insertCareerProgress(updated)
-            addXpToTopic(topicId, 30) // Unlock 30 XP for completing a topic
+            addXpToTopic(topicId, 30) // Unlock 30 XP for lesson complete
         }
     }
 
@@ -128,6 +136,99 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             existing.copy(level = 2, xp = 120, lastActiveTime = System.currentTimeMillis())
         }
         jeevanDao.insertCareerProgress(updated)
+    }
+
+    // --- Subtopic Custom Relations ---
+    suspend fun saveSubtopicProgress(subtopicId: String, parentTopicId: String, isCompleted: Boolean, reason: String?, score: Int): Unit = withContext(Dispatchers.IO) {
+        val subObj = SubtopicProgress(
+            subtopicId = subtopicId,
+            parentTopicId = parentTopicId,
+            isCompleted = isCompleted,
+            reasonNotCompleted = if (isCompleted) null else reason,
+            completionDate = if (isCompleted) System.currentTimeMillis() else null,
+            assessmentScore = score
+        )
+        jeevanDao.insertSubtopicProgress(subObj)
+
+        if (isCompleted) {
+            addXpToTopic(parentTopicId, 40) // Award 40 XP for subtopic validation
+        }
+    }
+
+    // --- News Bookmarks ---
+    suspend fun addNewsBookmark(title: String, category: String, url: String, description: String): Unit = withContext(Dispatchers.IO) {
+        val news = NewsBookmark(
+            title = title,
+            category = category,
+            url = url,
+            description = description,
+            savedAt = System.currentTimeMillis()
+        )
+        jeevanDao.insertNewsBookmark(news)
+    }
+
+    suspend fun deleteNewsBookmark(bookmark: NewsBookmark): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.deleteNewsBookmark(bookmark)
+    }
+
+    // --- Portfolio Holdings ---
+    suspend fun addPortfolioHolding(
+        assetName: String,
+        quantity: Double,
+        purchasePrice: Double,
+        assetType: String,
+        purchaseDate: Long = System.currentTimeMillis(),
+        notes: String = "",
+        symbol: String = "",
+        exchange: String = "NSE",
+        sector: String = "Other"
+    ): Unit = withContext(Dispatchers.IO) {
+        val holding = PortfolioHolding(
+            assetName = assetName,
+            quantity = quantity,
+            purchasePrice = purchasePrice,
+            assetType = assetType,
+            currentPrice = purchasePrice,
+            purchaseDate = purchaseDate,
+            notes = notes,
+            symbol = symbol,
+            exchange = exchange,
+            sector = sector
+        )
+        jeevanDao.insertPortfolioHolding(holding)
+    }
+
+    suspend fun liquidatePortfolioValueToBalance(): Unit = withContext(Dispatchers.IO) {
+        // Option to liquidate or manage, or optionally use standard wallet updates if needed
+    }
+
+    suspend fun fluctuateHoldingPrices(): Unit = withContext(Dispatchers.IO) {
+        val holdings = jeevanDao.getAllPortfolioHoldingsDirect()
+        val random = java.util.Random()
+        for (holding in holdings) {
+            val pct = (random.nextDouble() * 3.3) - 1.5 // range -1.5% to +1.8%
+            val updatedPrice = (holding.currentPrice * (1.0 + pct / 100.0)).coerceAtLeast(0.1)
+            val roundedPrice = Math.round(updatedPrice * 100.0) / 100.0
+            val updated = holding.copy(currentPrice = roundedPrice)
+            jeevanDao.insertPortfolioHolding(updated)
+        }
+    }
+
+    suspend fun deletePortfolioHolding(holding: PortfolioHolding): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.deletePortfolioHolding(holding)
+    }
+
+    // --- Career Goal Funds Operations ---
+    suspend fun addCareerGoalFund(name: String, targetAmount: Double, currentAmount: Double): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.insertCareerGoalFund(CareerGoalFund(name = name, targetAmount = targetAmount, currentAmount = currentAmount))
+    }
+
+    suspend fun updateCareerGoalFund(fund: CareerGoalFund): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.updateCareerGoalFund(fund)
+    }
+
+    suspend fun deleteCareerGoalFund(fund: CareerGoalFund): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.deleteCareerGoalFund(fund)
     }
 
     // --- Health Operations ---
@@ -181,47 +282,138 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             jeevanDao.insertHealthLog(
                 HealthLog(
                     dateString = todayStr,
-                    waterIntakeMl = 1200,
+                    waterIntakeMl = 1500,
                     caloriesBurned = 340,
                     caloriesConsumed = 1800,
-                    sleepMinutes = 445, // 7 hr 25 min
+                    sleepMinutes = 445, 
                     moodScore = 4,
-                    journalEntry = "Productive morning, did cloud labs and feeling confident.",
+                    journalEntry = "Constructed custom infrastructure deployment pipeline templates. Cognitive focus optimal.",
                     stepsCount = 4250
                 )
             )
         }
 
-        // Add Career presets including the 28-Week Ultimate DevOps Roadmap
-        val defaultTopics = listOf(
-            "linux", "kubernetes", "python", "aws", "docker",
-            "week_1_2_linux",
-            "week_3_4_networking",
-            "week_5_6_python",
-            "week_7_8_git",
-            "week_9_10_cicd",
-            "week_11_12_terraform",
-            "week_13_14_ansible",
-            "week_15_16_docker",
-            "week_17_18_k8s",
-            "week_19_20_aws",
-            "week_21_22_security",
-            "week_23_24_monitoring",
-            "week_25_26_logging",
-            "week_27_28_capstone"
-        )
+        // Add Career core entries
+        val defaultTopics = listOf("linux", "kubernetes", "python", "aws", "docker")
         for (topic in defaultTopics) {
             if (jeevanDao.getCareerProgressByTopic(topic) == null) {
                 jeevanDao.insertCareerProgress(
                     CareerProgress(
                         topicId = topic,
-                        level = 1,
-                        xp = 30,
+                        level = 2,
+                        xp = 150,
                         completedQuizIds = "intro",
                         lastActiveTime = System.currentTimeMillis()
                     )
                 )
             }
+        }
+
+        // Seed subtopics with expanded AWS, Docker, and Kubernetes relational definitions
+        val defaultSubtopics = listOf(
+            // AWS subtopics
+            SubtopicProgress("aws_iam", "aws", true, System.currentTimeMillis(), null, 90),
+            SubtopicProgress("aws_ec2", "aws", false, null, "Lack of Time", 0),
+            SubtopicProgress("aws_vpc", "aws", false, null, "Need Revision", 0),
+            SubtopicProgress("aws_s3", "aws", true, System.currentTimeMillis(), null, 85),
+            
+            // Docker subtopics
+            SubtopicProgress("docker_basics", "docker", true, System.currentTimeMillis(), null, 95),
+            SubtopicProgress("docker_images", "docker", true, System.currentTimeMillis(), null, 90),
+            SubtopicProgress("docker_containers", "docker", false, null, "Difficult Topic", 0),
+            SubtopicProgress("docker_volumes", "docker", false, null, "Busy", 0),
+
+            // Kubernetes subtopics
+            SubtopicProgress("k8s_pods", "kubernetes", true, System.currentTimeMillis(), null, 100),
+            SubtopicProgress("k8s_deployments", "kubernetes", false, null, "Need Revision", 0),
+            SubtopicProgress("k8s_services", "kubernetes", false, null, "Lack of Time", 0)
+        )
+
+        for (sub in defaultSubtopics) {
+            if (jeevanDao.getSubtopicProgressById(sub.subtopicId) == null) {
+                jeevanDao.insertSubtopicProgress(sub)
+            }
+        }
+
+        // Seed initial portfolio investments from the Google Sheet
+        val defaultHoldings = listOf(
+            PortfolioHolding(0, "ICICI Prudential Silver ETF", 2.0, 85.0, "ETF", 92.5, symbol = "SILVERBEES", exchange = "NSE", sector = "Commodities"),
+            PortfolioHolding(0, "IOC", 3.0, 165.0, "STOCK", 172.4, symbol = "IOC", exchange = "NSE", sector = "Energy"),
+            PortfolioHolding(0, "ITC", 2.0, 410.0, "STOCK", 438.5, symbol = "ITC", exchange = "NSE", sector = "Consumer Goods"),
+            PortfolioHolding(0, "JSWENERGY", 1.0, 575.0, "STOCK", 622.5, symbol = "JSWENERGY", exchange = "NSE", sector = "Power"),
+            PortfolioHolding(0, "NTPC", 2.0, 340.0, "STOCK", 365.2, symbol = "NTPC", exchange = "NSE", sector = "Power"),
+            PortfolioHolding(0, "POWERGRID", 2.0, 280.0, "STOCK", 298.8, symbol = "POWERGRID", exchange = "NSE", sector = "Power"),
+            PortfolioHolding(0, "UNION BANK", 1.0, 135.0, "STOCK", 142.1, symbol = "UNIONBANK", exchange = "BSE", sector = "Banking"),
+            PortfolioHolding(0, "ICICI Prudential Gold ETF", 5.0, 60.0, "ETF", 68.4, symbol = "GOLDBEES", exchange = "NSE", sector = "Commodities"),
+            PortfolioHolding(0, "ICICI Prudential NIFTY Next 50 Index Fund", 4.0, 125.0, "MF", 135.5, symbol = "ICICINIFT", exchange = "Mutual Fund", sector = "Index Funds"),
+            PortfolioHolding(0, "ONGC", 2.0, 282.5, "STOCK", 295.4, symbol = "ONGC", exchange = "NSE", sector = "Energy")
+        )
+
+        // Seed default Career Investment Goals
+        val defaultCareerGoalFunds = listOf(
+            CareerGoalFund(0, "AWS Certification Fund", 15000.0, 9500.0),
+            CareerGoalFund(0, "Emergency Fund", 60000.0, 18000.0),
+            CareerGoalFund(0, "Laptop Upgrade Fund", 80000.0, 26000.0),
+            CareerGoalFund(0, "DevOps Learning Fund", 20000.0, 12000.0)
+        )
+
+        if (jeevanDao.getUserProfileDirect()?.id == 1) {
+            // Seed once
+            defaultHoldings.forEach {
+                jeevanDao.insertPortfolioHolding(it)
+            }
+            defaultCareerGoalFunds.forEach {
+                jeevanDao.insertCareerGoalFund(it)
+            }
+        }
+
+        // Seed initial news articles
+        val defaultNews = listOf(
+            NewsBookmark(
+                title = "Kubernetes 1.30: Pod Security Standards Graduation",
+                category = "DevOps",
+                url = "https://kubernetes.io/blog/",
+                description = "Details the transition of pod admission systems directly into high-fidelity graduation matrices. Critical migration mandatory for container sandboxes.",
+                savedAt = System.currentTimeMillis() - 86400000
+            ),
+            NewsBookmark(
+                title = "AWS IAM Identity Center Multi-Region Authentication Release",
+                category = "DevOps",
+                url = "https://aws.amazon.com/blogs/",
+                description = "Unveils accelerated directory federation channels across secondary fallback clusters. Zero structural changes required for AWS DevOps pipelines.",
+                savedAt = System.currentTimeMillis() - 172800000
+            ),
+            NewsBookmark(
+                title = "RBI Updates Digital Rupee Wallet Safeguards",
+                category = "Finance",
+                url = "https://rbi.org.in/",
+                description = "Introduces offline localized escrow contracts for purchasing power tracking in compact remote sandboxes.",
+                savedAt = System.currentTimeMillis() - 259200000
+            ),
+            NewsBookmark(
+                title = "Nifty 50 Hits Raw Records Driven by Steady Retail SIP Inflow Boost",
+                category = "Finance",
+                url = "https://moneycontrol.com/",
+                description = "Nifty 50 surges above critical consolidation marks, demonstrating high market integrity. Expert advisors suggest expanding index mutual fund allocations.",
+                savedAt = System.currentTimeMillis() - 364000000
+            ),
+            NewsBookmark(
+                title = "JOB OPENING: TCS Recruiting DevOps SRE Engineers (Chennai/Hyd)",
+                category = "Job Openings",
+                url = "https://tcs.com/careers",
+                description = "TCS is scouting professionals with 1-4 years expertise in Jenkins, Terraform, and Docker. Package: ₹6 - 11 LPA.",
+                savedAt = System.currentTimeMillis() - 43200000
+            ),
+            NewsBookmark(
+                title = "JOB OPENING: CRED Seeking Remote Junior Infrastructure Engineer",
+                category = "Job Openings",
+                url = "https://careers.cred.club/",
+                description = "Scale production systems on AWS, manage Kubernetes clusters, and automate with Python. Exceptional compensation perks.",
+                savedAt = System.currentTimeMillis() - 120000000
+            )
+        )
+        defaultNews.forEach {
+            jeevanDao.insertNewsBookmark(it)
         }
     }
 }
