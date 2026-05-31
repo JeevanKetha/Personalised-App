@@ -2200,6 +2200,11 @@ fun CareerHub(viewModel: JeevanViewModel) {
     var activeSubTab by remember { mutableStateOf("ROADMAP") } // "ROADMAP", "DAILY_STUDY", "DIAGNOSTICS", "ARCHIVE"
     var skippedReasonInput by remember { mutableStateOf("Busy") }
     var showAddUnitDialog by remember { mutableStateOf(false) }
+    var showAddResourceDialog by remember { mutableStateOf(false) }
+    var resourcesSubTab by remember { mutableStateOf("RECOMMENDED") } // "RECOMMENDED", "SAVED"
+    var searchQuery by remember { mutableStateOf("") }
+    var filterResourceType by remember { mutableStateOf("ALL") }
+    val savedResources by viewModel.savedResources.collectAsState()
 
     val weekOrder = (1..28).map { "week_$it" }
 
@@ -2635,6 +2640,94 @@ fun CareerHub(viewModel: JeevanViewModel) {
             )
         }
 
+        if (showAddResourceDialog) {
+            var resName by remember { mutableStateOf("") }
+            var resTypeName by remember { mutableStateOf("Documentation") }
+            var resDesc by remember { mutableStateOf("") }
+            var resLink by remember { mutableStateOf("") }
+            var resSource by remember { mutableStateOf("") }
+            
+            AlertDialog(
+                onDismissRequest = { showAddResourceDialog = false },
+                title = { Text("ADD RESEARCH OR STUDY RESOURCE", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Save tutorials, cheatsheets, configuration PDFs, or link sources to your secure device databases.", color = TextMuted, fontSize = 10.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        OutlinedTextField(
+                            value = resName, 
+                            onValueChange = { resName = it }, 
+                            label = { Text("Resource Name (e.g. AWS S3 CheatSheet)", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Text("SELECT TYPE:", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        val types = listOf("Documentation", "Video", "PDF", "Notes", "GitHub", "Certifications")
+                        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            types.forEach { t ->
+                                Button(
+                                    onClick = { resTypeName = t },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (resTypeName == t) CyberCyan else ImmersiveSurfaceVariant),
+                                    modifier = Modifier.height(28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) { Text(t.uppercase(), fontSize = 8.sp, color = if (resTypeName == t) Color.Black else Color.White) }
+                            }
+                        }
+                        
+                        OutlinedTextField(
+                            value = resSource, 
+                            onValueChange = { resSource = it }, 
+                            label = { Text("Source Creator (e.g. AWS Official, Brad Traversy)", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = resDesc, 
+                            onValueChange = { resDesc = it }, 
+                            label = { Text("Description Notes", fontSize = 11.sp) },
+                            modifier = Modifier.fillMaxWidth().height(60.dp)
+                        )
+                        OutlinedTextField(
+                            value = resLink, 
+                            onValueChange = { resLink = it }, 
+                            label = { Text("URL Link (starts with https://)", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (resName.isNotBlank()) {
+                                val sdf = java.text.SimpleDateFormat("dd-MMM-yyyy", java.util.Locale.getDefault())
+                                val formattedDate = sdf.format(java.util.Date())
+                                viewModel.saveResource(
+                                    name = resName,
+                                    type = resTypeName,
+                                    description = resDesc,
+                                    linkOrPath = resLink,
+                                    source = resSource,
+                                    dateAdded = formattedDate
+                                )
+                                showAddResourceDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                        enabled = resName.isNotBlank()
+                    ) { Text("SAVE TO CORE DB", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                },
+                dismissButton = { 
+                    Button(onClick = { showAddResourceDialog = false }) { 
+                        Text("CANCEL", fontSize = 11.sp) 
+                    } 
+                },
+                containerColor = ImmersiveSurface
+            )
+        }
+
         val resourceSelectedCategory = remember { mutableStateOf("ALL") }
 
         LazyColumn(
@@ -2817,14 +2910,15 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
             if (activeSubTab == "DAILY_STUDY") {
                 item {
-                    Column {
-                        Text("SELECT WEEK", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Column(modifier = Modifier.padding(bottom = 6.dp)) {
+                        Text("SELECT ACTIVE STUDY WEEK (1 - 28)", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            (1..11).forEach { w ->
+                            (1..28).forEach { w ->
                                 FilterChip(
                                     selected = selectedWeek == w,
                                     onClick = { viewModel.setSelectedWeek(w) },
-                                    label = { Text("Week $w", fontSize = 10.sp) },
+                                    label = { Text("Week $w", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
                                     colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
                                 )
                             }
@@ -2832,8 +2926,9 @@ fun CareerHub(viewModel: JeevanViewModel) {
                     }
                 }
                 item {
-                    Column {
-                        Text("SELECT DAY", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                        Text("SELECT INTRADAY TASK (DAY 1 - 7)", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                             (1..7).forEach { d ->
                                 FilterChip(
@@ -2847,48 +2942,131 @@ fun CareerHub(viewModel: JeevanViewModel) {
                     }
                 }
 
-                val curr = getCurriculumContent(selectedWeek, selectedDay)
-                val activeSubId = when (selectedWeek) {
-                    1 -> "aws_iam"
-                    2 -> "aws_s3"
-                    3 -> "aws_ec2"
-                    4 -> "aws_vpc"
-                    5 -> "docker_basics"
-                    6 -> "docker_images"
-                    7 -> "docker_containers"
-                    8 -> "docker_volumes"
-                    9 -> "k8s_pods"
-                    10 -> "k8s_deployments"
-                    else -> "k8s_services"
+                val curr = com.example.data.entity.SreCurriculum.getDailyTaskDetail(selectedWeek, selectedDay)
+                val activeSubId = "week_${selectedWeek}_day_${selectedDay}"
+                val subObj = subList.firstOrNull { it.subtopicId == activeSubId }
+                val isCompleted = subObj != null && subObj.isCompleted
+
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), 
+                        border = BorderStroke(1.dp, if (isCompleted) CyberGreen.copy(alpha = 0.4f) else CyberCyan.copy(alpha = 0.25f)), 
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("TODAY'S EXECUTION TASK", color = CyberCyan, fontSize = 8.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (isCompleted) CyberGreen.copy(alpha = 0.15f) else ImmersiveAmber.copy(alpha = 0.15f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (isCompleted) "COMPLETED" else "PENDING", 
+                                        color = if (isCompleted) CyberGreen else ImmersiveAmber, 
+                                        fontSize = 8.sp, 
+                                        fontWeight = FontWeight.Bold, 
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = "Week $selectedWeek - Day $selectedDay", color = TextMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(text = curr.topicName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
                 }
 
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.25f)), modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), 
+                        border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)), 
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Column(modifier = Modifier.padding(14.dp)) {
-                            Text("W$selectedWeek D$selectedDay • CURRICULUM", color = CyberCyan, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = curr.first, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("🎯 LEARNING OBJECTIVES", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            curr.learningObjectives.forEach { obj ->
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(10.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = obj, color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
+
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)), modifier = Modifier.fillMaxWidth()) {
+                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)), modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text("📖 CORE CONCEPT & STUDY GUIDE", color = CyberGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = curr.second, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
+                            Text(text = curr.studyGuide, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
                         }
                     }
                 }
+
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)), modifier = Modifier.fillMaxWidth()) {
+                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)), modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text("🔥 PRODUCTION SRE CASE STUDY", color = ImmersiveRose, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = curr.third, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
+                            Text(text = curr.caseStudy, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
                         }
                     }
                 }
+
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                        border = BorderStroke(0.6.dp, if (isCompleted) CyberGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text("⚙️ EXECUTION ENGINE", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (isCompleted) "✓ Study Progress Locked" else "Pending completion mark", 
+                                    color = if (isCompleted) CyberGreen else TextMuted, 
+                                    fontSize = 11.sp
+                                )
+                                Button(
+                                    onClick = { 
+                                        viewModel.toggleSubtopic(
+                                            activeSubId,
+                                            when {
+                                                selectedWeek == 1 || selectedWeek == 2 || selectedWeek == 3 -> "linux"
+                                                selectedWeek == 4 -> "python"
+                                                selectedWeek in 5..14 -> "aws"
+                                                selectedWeek in 15..21 -> "docker"
+                                                else -> "kubernetes"
+                                            },
+                                            !isCompleted,
+                                            "Self-Paced Daily Study",
+                                            0
+                                        ) 
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isCompleted) ImmersiveRose.copy(alpha = 0.2f) else CyberGreen),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text(
+                                        text = if (isCompleted) "RESET PROGRESS" else "MARK COMPLETED", 
+                                        color = if (isCompleted) Color.White else Color.Black, 
+                                        fontSize = 9.sp, 
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 item {
                     val savedNote = userNotes[activeSubId] ?: ""
                     var textNotesInput by remember(activeSubId) { mutableStateOf(savedNote) }
@@ -2903,15 +3081,64 @@ fun CareerHub(viewModel: JeevanViewModel) {
                         modifier = Modifier.fillMaxWidth().height(90.dp)
                     )
                 }
+
                 item {
-                    val subObj = subList.firstOrNull { it.subtopicId == activeSubId }
-                    val isPassed = subObj != null && subObj.isCompleted && subObj.assessmentScore >= passingScore
-                    Button(
-                        onClick = { viewModel.startAssessment(activeSubId) },
-                        colors = ButtonDefaults.buttonColors(containerColor = if (isPassed) CyberGreen else CyberCyan),
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                        border = BorderStroke(0.6.dp, if (isCompleted) CyberCyan.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.05f)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (isPassed) "VERIFIED LEVEL INTERVIEW PASSED (${subObj?.assessmentScore}%) • RETRY" else "🚀 LAUNCH COGNITIVE INTERVIEW CHECK", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text("🛡️ COGNITIVE ASSESSMENT", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (!isCompleted) "🔒 Locked: Complete today's study guide first to unlock cognitive checkpoint assessment query loops." else "🔓 Unlocked: Access live interactive DevOps interview checklist for this topic.",
+                                color = if (isCompleted) TextCelestial else TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            val isPassed = subObj != null && subObj.isCompleted && subObj.assessmentScore >= passingScore
+                            Button(
+                                onClick = { 
+                                    if (isCompleted) {
+                                        viewModel.startAssessment(activeSubId) 
+                                    }
+                                },
+                                enabled = isCompleted,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (!isCompleted) Color.White.copy(alpha = 0.05f) else if (isPassed) CyberGreen else CyberCyan,
+                                    disabledContainerColor = Color.White.copy(alpha = 0.05f)
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(44.dp)
+                            ) {
+                                Text(
+                                    text = if (!isCompleted) "🔒 LOCKED UNTIL STUDY COMPLETION" else if (isPassed) "VERIFIED MATCH INTERVIEW PASSED (${subObj?.assessmentScore}%) • PRACTICE AGAIN" else "🚀 LAUNCH COGNITIVE INTERVIEW CHECK", 
+                                    color = if (isCompleted) Color.Black else TextMuted, 
+                                    fontWeight = FontWeight.Bold, 
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                        border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text("🔄 RETENTION & REVISION MAPPING", color = CyberGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Weekly Schedule: ${com.example.data.entity.SreCurriculum.getWeekTitle(selectedWeek)}. Revision: Scheduled automatically post-completion.",
+                                color = TextCelestial,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }
@@ -3067,90 +3294,266 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
             if (activeSubTab == "RESOURCES") {
                 item {
-                    Text("SRE & DEVOPS ULTIMATE RESOURCE SHEETS", color = CyberCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    Text("SRE & DEVOPS RESOURCE SHEETS", color = CyberCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                 }
 
                 item {
-                    val categories = listOf("ALL", "LINUX", "AWS", "CONTAINERS", "KUBERNETES", "INFRASTRUCTURE")
-                    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        categories.forEach { cat ->
-                            val isSel = resourceSelectedCategory.value == cat
-                            FilterChip(
-                                selected = isSel,
-                                onClick = { resourceSelectedCategory.value = cat },
-                                label = { Text(cat, fontSize = 9.sp, fontWeight = FontWeight.Bold) },
-                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
-                            )
+                    // Double sub-tab selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(ImmersiveSurfaceVariant).padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Button(
+                            onClick = { resourcesSubTab = "RECOMMENDED" },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (resourcesSubTab == "RECOMMENDED") ImmersiveIndigo else Color.Transparent,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.weight(1f).height(34.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("RECOMMENDED RESOURCES", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
+                        Button(
+                            onClick = { resourcesSubTab = "SAVED" },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (resourcesSubTab == "SAVED") ImmersiveIndigo else Color.Transparent,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.weight(1f).height(34.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("SAVED RESOURCES (${savedResources.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         }
                     }
                 }
 
-                val resourceSheetItems = listOf(
-                    SreResource("LINUX", "The Linux Command Line", "William Shotts", "Master the shell interface, file systems, navigation, and core automation scripting.", "Book (Free PDF)", "https://linuxcommand.org/tlcl.php"),
-                    SreResource("LINUX", "Explain Shell Visual", "Visual Parser", "Interactive tool explaining complex bash scripts line by line dynamically.", "Interactive Web Tool", "https://explainshell.com"),
-                    SreResource("LINUX", "Linux Foundation LFS201", "Linux Foundation", "Official training for professional sysadmin configurations and administration.", "Official Course", "https://training.linuxfoundation.org"),
-                    
-                    SreResource("AWS", "Adrian Cantrill's SRE Course", "Cantrill.io", "Gold-standard architectural training covering VPC, routing, and cloud failovers.", "Interactive Courses", "https://learn.cantrill.io"),
-                    SreResource("AWS", "AWS Architecture Center", "AWS Official Docs", "Standard reference designs, structured whitepapers, and disaster recovery rules.", "Official Documentation", "https://aws.amazon.com/architecture"),
-                    SreResource("AWS", "Cloudcraft Architecture", "Visual Modeler", "Design and model real-time connected AWS cost forecasts and architectures.", "Modeling Web Tool", "https://cloudcraft.co"),
+                if (resourcesSubTab == "RECOMMENDED") {
+                    item {
+                        val categories = listOf("ALL", "LINUX", "AWS", "CONTAINERS", "KUBERNETES", "INFRASTRUCTURE")
+                        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categories.forEach { cat ->
+                                val isSel = resourceSelectedCategory.value == cat
+                                FilterChip(
+                                    selected = isSel,
+                                    onClick = { resourceSelectedCategory.value = cat },
+                                    label = { Text(cat, fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
+                                )
+                            }
+                        }
+                    }
 
-                    SreResource("CONTAINERS", "Docker Deep Dive", "Nigel Poulton", "The definitive handbook on Docker containers host networking and layers mapping.", "Book (Paper/Kindle)", "https://nigelpoulton.com"),
-                    SreResource("CONTAINERS", "Play with Docker Labs", "Docker Sandbox", "Free, multi-node terminal playground to try docker images, volumes & compose.", "Sandbox Playground", "https://labs.play-with-docker.com"),
-                    SreResource("CONTAINERS", "Docker Security Benchmarks", "CIS Benchmarks", "Hardening standards and container isolation escape prevention guidelines.", "Official Standards", "https://www.cisecurity.org"),
+                    val resourceSheetItems = listOf(
+                        SreResource("LINUX", "The Linux Command Line", "William Shotts", "Master the shell interface, file systems, navigation, and core automation scripting.", "Book (Free PDF)", "https://linuxcommand.org/tlcl.php"),
+                        SreResource("LINUX", "Explain Shell Visual", "Visual Parser", "Interactive tool explaining complex bash scripts line by line dynamically.", "Interactive Web Tool", "https://explainshell.com"),
+                        SreResource("LINUX", "Linux Foundation LFS201", "Linux Foundation", "Official training for professional sysadmin configurations and administration.", "Official Course", "https://training.linuxfoundation.org"),
+                        
+                        SreResource("AWS", "Adrian Cantrill's SRE Course", "Cantrill.io", "Gold-standard architectural training covering VPC, routing, and cloud failovers.", "Interactive Courses", "https://learn.cantrill.io"),
+                        SreResource("AWS", "AWS Architecture Center", "AWS Official Docs", "Standard reference designs, structured whitepapers, and disaster recovery rules.", "Official Documentation", "https://aws.amazon.com/architecture"),
+                        SreResource("AWS", "Cloudcraft Architecture", "Visual Modeler", "Design and model real-time connected AWS cost forecasts and architectures.", "Modeling Web Tool", "https://cloudcraft.co"),
 
-                    SreResource("KUBERNETES", "KubeAcademy Pro", "VMware", "Comprehensive interactive courses covering cluster services, endpoints & DNS.", "Education Site", "https://kubeacademy.com"),
-                    SreResource("KUBERNETES", "Kubernetes.io Tutorials", "K8s Core Team", "Hands-on, localized step-by-step exercises for pods and deployments.", "Official Exercises", "https://kubernetes.io/docs/tutorials"),
-                    SreResource("KUBERNETES", "Lens Core", "Mirantis", "Full developer viewport and IDE interface to debug live cluster nodes.", "Client Tool", "https://k8slens.dev"),
+                        SreResource("CONTAINERS", "Docker Deep Dive", "Nigel Poulton", "The definitive handbook on Docker containers host networking and layers mapping.", "Book (Paper/Kindle)", "https://nigelpoulton.com"),
+                        SreResource("CONTAINERS", "Play with Docker Labs", "Docker Sandbox", "Free, multi-node terminal playground to try docker images, volumes & compose.", "Sandbox Playground", "https://labs.play-with-docker.com"),
+                        SreResource("CONTAINERS", "Docker Security Benchmarks", "CIS Benchmarks", "Hardening standards and container isolation escape prevention guidelines.", "Official Standards", "https://www.cisecurity.org"),
 
-                    SreResource("INFRASTRUCTURE", "Google SRE Library", "Google Engineering", "The canonical Google SRE books defining error budgets, SLA & observability.", "Free Library (Books)", "https://sre.google/books"),
-                    SreResource("INFRASTRUCTURE", "Terraform Registry Learn", "HashiCorp", "Complete setup instructions, module patterns, and remote backend lockers.", "Official Guides", "https://developer.hashicorp.com/terraform"),
-                    SreResource("INFRASTRUCTURE", "Helm Charts Registry", "Artifact Hub", "Distributed package manager hub to deploy validated Prometheus & Grafana charts.", "Artifact Hub", "https://artifacthub.io")
-                )
+                        SreResource("KUBERNETES", "KubeAcademy Pro", "VMware", "Comprehensive interactive courses covering cluster services, endpoints & DNS.", "Education Site", "https://kubeacademy.com"),
+                        SreResource("KUBERNETES", "Kubernetes.io Tutorials", "K8s Core Team", "Hands-on, localized step-by-step exercises for pods and deployments.", "Official Exercises", "https://kubernetes.io/docs/tutorials"),
+                        SreResource("KUBERNETES", "Lens Core", "Mirantis", "Full developer viewport and IDE interface to debug live cluster nodes.", "Client Tool", "https://k8slens.dev"),
 
-                // Sort and filter resource spreadsheet list inline
-                val filteredResources = resourceSheetItems.filter {
-                    resourceSelectedCategory.value == "ALL" || it.category == resourceSelectedCategory.value
-                }
+                        SreResource("INFRASTRUCTURE", "Google SRE Library", "Google Engineering", "The canonical Google SRE books defining error budgets, SLA & observability.", "Free Library (Books)", "https://sre.google/books"),
+                        SreResource("INFRASTRUCTURE", "Terraform Registry Learn", "HashiCorp", "Complete setup instructions, module patterns, and remote backend lockers.", "Official Guides", "https://developer.hashicorp.com/terraform"),
+                        SreResource("INFRASTRUCTURE", "Helm Charts Registry", "Artifact Hub", "Distributed package manager hub to deploy validated Prometheus & Grafana charts.", "Artifact Hub", "https://artifacthub.io")
+                    )
 
-                items(filteredResources) { res ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.04f))
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                                        .background(ImmersiveIndigo.copy(alpha = 0.15f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(text = res.category, color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    val filteredResources = resourceSheetItems.filter {
+                        resourceSelectedCategory.value == "ALL" || it.category == resourceSelectedCategory.value
+                    }
+
+                    items(filteredResources) { res ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.04f))
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                                            .background(ImmersiveIndigo.copy(alpha = 0.15f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(text = res.category, color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                    }
+                                    Box(
+                                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                                            .background(CyberGreen.copy(alpha = 0.1f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(text = res.type, color = CyberGreen, fontSize = 8.sp, fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
-                                Box(
-                                    modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                                        .background(CyberGreen.copy(alpha = 0.1f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(text = res.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text(text = "By ${res.author}", color = TextMuted, fontSize = 10.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(text = res.description, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, lineHeight = 14.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                                Button(
+                                    onClick = { uriHandler.openUri(res.url) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ImmersiveSurfaceVariant),
+                                    border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)),
+                                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                                    contentPadding = PaddingValues(0.dp)
                                 ) {
-                                    Text(text = res.type, color = CyberGreen, fontSize = 8.sp, fontWeight = FontWeight.SemiBold)
+                                    Icon(Icons.Default.Share, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("OPEN RESOURCE MATERIAL SHEET", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(text = res.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text(text = "By ${res.author}", color = TextMuted, fontSize = 10.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = res.description, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, lineHeight = 14.sp)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-                            Button(
-                                onClick = { uriHandler.openUri(res.url) },
-                                colors = ButtonDefaults.buttonColors(containerColor = ImmersiveSurfaceVariant),
-                                border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)),
-                                modifier = Modifier.fillMaxWidth().height(32.dp),
-                                contentPadding = PaddingValues(0.dp)
+                        }
+                    }
+                } else if (resourcesSubTab == "SAVED") {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
+                            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.15f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("PERSONAL LEARNING REPOSITORY", color = CyberCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Text("Save tutorials, documentation, notes, and cert materials permanently.", color = TextMuted, fontSize = 11.sp)
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = { showAddResourceDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("ADD CUSTOM RESOURCE", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Filter saved resources...", fontSize = 11.sp, color = TextMuted) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp)) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = CyberCyan,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f)
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        )
+                    }
+
+                    item {
+                        val filterTypes = listOf("ALL", "DOCUMENTATION", "VIDEO", "PDF", "NOTES", "GITHUB", "CERTIFICATIONS")
+                        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            filterTypes.forEach { type ->
+                                val isSel = filterResourceType == type
+                                FilterChip(
+                                    selected = isSel,
+                                    onClick = { filterResourceType = type },
+                                    label = { Text(type, fontSize = 8.sp, fontWeight = FontWeight.Bold) },
+                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
+                                )
+                            }
+                        }
+                    }
+
+                    val filteredSaved = savedResources.filter { res ->
+                        val matchesSearch = res.name.contains(searchQuery, ignoreCase = true) || 
+                                           res.description.contains(searchQuery, ignoreCase = true) || 
+                                           res.source.contains(searchQuery, ignoreCase = true) ||
+                                           res.type.contains(searchQuery, ignoreCase = true)
+                        val matchesType = filterResourceType == "ALL" || res.type.uppercase() == filterResourceType
+                        matchesSearch && matchesType
+                    }
+
+                    if (filteredSaved.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Share, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("OPEN RESOURCE MATERIAL SHEET", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = TextMuted, modifier = Modifier.size(36.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text("No custom resources match filters.", color = TextMuted, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Click 'Add Custom Resource' to save one!", color = CyberCyan, fontSize = 11.sp, modifier = Modifier.clickable { showAddResourceDialog = true })
+                                }
+                            }
+                        }
+                    } else {
+                        items(filteredSaved) { res ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                                                .background(ImmersiveIndigo.copy(alpha = 0.15f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(text = res.type.uppercase(), color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                        }
+                                        Text(text = "Saved: ${res.dateAdded}", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(text = res.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    if (res.source.isNotBlank()) {
+                                        Text(text = "Source: ${res.source}", color = TextMuted, fontSize = 10.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                                    }
+                                    if (res.description.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(text = res.description, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, lineHeight = 14.sp)
+                                    }
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                                        val isClickable = res.linkOrPath.isNotBlank() && (res.linkOrPath.startsWith("http://") || res.linkOrPath.startsWith("https://"))
+                                        Button(
+                                            onClick = { 
+                                                if (isClickable) {
+                                                    try { uriHandler.openUri(res.linkOrPath) } catch (e: Exception) {}
+                                                }
+                                            },
+                                            enabled = isClickable,
+                                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveSurfaceVariant),
+                                            border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)),
+                                            modifier = Modifier.weight(1f).height(32.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Icon(Icons.Default.Share, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("OPEN LINK", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                                        }
+                                        Button(
+                                            onClick = { viewModel.deleteResource(res) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose.copy(alpha = 0.15f)),
+                                            border = BorderStroke(0.6.dp, ImmersiveRose.copy(alpha = 0.3f)),
+                                            modifier = Modifier.width(80.dp).height(32.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = null, tint = ImmersiveRose, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("DELETE", fontSize = 9.sp, color = ImmersiveRose, fontFamily = FontFamily.Monospace)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
