@@ -1637,61 +1637,187 @@ fun FinanceHub(viewModel: JeevanViewModel) {
 
         // PORTFOLIO NEWS INTELLIGENCE
         item {
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            val portfolioNewsItems by viewModel.portfolioNewsItems.collectAsState()
+            val lastPortfolioNewsRefresh by viewModel.lastPortfolioNewsRefresh.collectAsState()
+
+            val refreshTimeStr = if (lastPortfolioNewsRefresh > 0L) {
+                java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(lastPortfolioNewsRefresh))
+            } else {
+                java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())
+            }
+            val nextRefreshTimeStr = if (lastPortfolioNewsRefresh > 0L) {
+                java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(lastPortfolioNewsRefresh + 7200000))
+            } else {
+                java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(System.currentTimeMillis() + 7200000))
+            }
+
             Card(
                 colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                modifier = Modifier.fillMaxWidth().testTag("portfolio_news_card")
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "PORTFOLIO NEWS INTELLIGENCE",
-                        color = ImmersiveTextPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Holdings-specific security intelligence stream.", color = TextMuted, fontSize = 10.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "PORTFOLIO NEWS INTELLIGENCE",
+                                color = ImmersiveTextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Holdings-specific security intelligence stream.", color = TextMuted, fontSize = 10.sp)
+                        }
+                        IconButton(
+                            onClick = { viewModel.refreshPortfolioNews() },
+                            modifier = Modifier.testTag("refresh_portfolio_news_btn")
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
+                                contentDescription = "Refresh Portfolio News",
+                                tint = CyberCyan,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Refresh Schedule Tracker Block
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.03f))
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("LAST UPDATED", color = TextMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            Text(refreshTimeStr, color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("NEXT AUTO-REFRESH", color = TextMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            Text(nextRefreshTimeStr, color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    val finalNewsRaw: List<Pair<String, String>> = if (portfolioNews.isNotEmpty()) {
-                        portfolioNews
+                    if (portfolioNewsItems.isEmpty()) {
+                        Text("No personalized holding updates calculated yet. Please check again or add a holding asset.", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 12.dp))
                     } else {
-                        generatePersonalizedNewsForHoldings(portfolios)
-                    }
-
-                    val finalNews: List<com.example.ui.viewmodel.NewsCenterItem> = finalNewsRaw.map {
-                        com.example.ui.viewmodel.NewsCenterItem(
-                            id = it.first,
-                            title = "Holding Insight",
-                            category = "JOBS",
-                            description = it.second,
-                            url = "",
-                            author = it.first
-                        )
-                    }
-
-                    if (finalNews.isEmpty()) {
-                        Text("No portfolio news calculated yet.", color = TextMuted, fontSize = 11.sp)
-                    } else {
-                        finalNews.forEach { news ->
-                            Column(modifier = Modifier.padding(vertical = 5.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(CyberCyan.copy(alpha = 0.15f))
-                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                    ) {
-                                        val labelText = news.author.ifBlank { "Holding Update" }
-                                        Text(labelText.uppercase(), color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        portfolioNewsItems.forEach { news ->
+                            Card(
+                                onClick = {
+                                    if (news.sourceUrl.isNotBlank()) {
+                                        try {
+                                            uriHandler.openUri(news.sourceUrl)
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("JeevanMainScreen", "Failed to open source URL: ${news.sourceUrl}", e)
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Real-Time Holding Insight", color = TextMuted, fontSize = 9.sp)
+                                },
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.02f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.04f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .testTag("portfolio_news_item_${news.id}")
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .background(CyberCyan.copy(alpha = 0.15f))
+                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(news.sourceName.uppercase(), color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(Color.White.copy(alpha = 0.05f))
+                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(news.symbol, color = ImmersiveTextPrimary, fontSize = 8.sp, fontWeight = FontWeight.Medium)
+                                            }
+                                        }
+                                        
+                                        // Matched badge
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color(0xFF2E7D32).copy(alpha = 0.15f))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(5.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFF4CAF50))
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("ACTIVE HOLDING", color = Color(0xFF81C784), fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(text = news.title, color = ImmersiveTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(text = news.description, color = TextMuted, fontSize = 10.sp, lineHeight = 14.sp)
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = androidx.compose.material.icons.Icons.Default.DateRange,
+                                                contentDescription = null,
+                                                tint = TextMuted,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text(news.publishedTime, color = TextMuted, fontSize = 8.sp)
+                                        }
+                                        
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "VERIFY ORIGINAL SOURCE",
+                                                color = CyberCyan,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Icon(
+                                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowForward,
+                                                contentDescription = null,
+                                                tint = CyberCyan,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                        }
+                                    }
                                 }
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(text = news.description, color = ImmersiveTextPrimary, fontSize = 11.sp)
                             }
-                            HorizontalDivider(color = Color.White.copy(alpha = 0.04f), modifier = Modifier.padding(vertical = 4.dp))
                         }
                     }
                 }
@@ -4542,12 +4668,25 @@ fun NewsCenterHub(viewModel: JeevanViewModel) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filteredArticles) { news ->
+                    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            if (news.url.isNotBlank()) {
+                                try {
+                                    uriHandler.openUri(news.url)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("JeevanMainScreen", "Failed to open news URL: ${news.url}", e)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("news_article_card_${news.id}"),
                         colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
                         border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f))
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
+                            // Top Row: Category and Source Information
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -4579,12 +4718,22 @@ fun NewsCenterHub(viewModel: JeevanViewModel) {
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
-                                Text(
-                                    text = news.author,
-                                    color = ImmersiveTextMuted,
-                                    fontSize = 8.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                                
+                                val displaySource = news.sourceName.ifBlank { news.author }.ifBlank { "Verified Source" }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(Color.White.copy(alpha = 0.05f))
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = displaySource.uppercase(),
+                                        color = ImmersiveTextMuted,
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
                             }
                             
                             Spacer(modifier = Modifier.height(6.dp))
@@ -4598,12 +4747,116 @@ fun NewsCenterHub(viewModel: JeevanViewModel) {
                             
                             Spacer(modifier = Modifier.height(6.dp))
                             
+                            // Structured display logic based on Category
+                            if (news.category == "JOBS") {
+                                // Render modern, structural Job details box
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.02f))
+                                        .border(0.5.dp, Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    if (news.company.isNotBlank()) {
+                                        Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            Text("Company: ", color = ImmersiveTextMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(news.company, color = CyberGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    if (news.role.isNotBlank()) {
+                                        Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            Text("Role: ", color = ImmersiveTextMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(news.role, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                    if (news.experience.isNotBlank()) {
+                                        Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            Text("Experience: ", color = ImmersiveTextMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(news.experience, color = Color.White, fontSize = 10.sp)
+                                        }
+                                    }
+                                    if (news.location.isNotBlank()) {
+                                        Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                                            Text("Location: ", color = ImmersiveTextMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(news.location, color = Color.White, fontSize = 10.sp)
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+                            
                             Text(
                                 text = news.description,
                                 color = ImmersiveTextMuted,
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp
                             )
+                            
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // Footer item metadatas
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val displayPosted = news.postedDate.ifBlank { "Recently" }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Default.DateRange,
+                                        contentDescription = null,
+                                        tint = ImmersiveTextMuted,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = displayPosted,
+                                        color = ImmersiveTextMuted,
+                                        fontSize = 8.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    
+                                    if (news.lastRefreshedTimeStr.isNotBlank()) {
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(CyberCyan.copy(alpha = 0.08f))
+                                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "SYNCED: ${news.lastRefreshedTimeStr}",
+                                                color = CyberCyan,
+                                                fontSize = 7.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                // Redirection CTA Label or Button
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val actionLabel = if (news.category == "JOBS") "APPLY NOW" else "VERIFY SOURCE"
+                                    val actionColor = if (news.category == "JOBS") CyberGreen else CyberCyan
+                                    
+                                    Text(
+                                        text = actionLabel,
+                                        color = actionColor,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Default.ArrowForward,
+                                        contentDescription = null,
+                                        tint = actionColor,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
