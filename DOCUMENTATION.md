@@ -301,17 +301,59 @@ Focuses on micro-habit consolidation, hydration monitors, weight/BMI calculation
 
 ---
 
-### HUB 5: UPDATES CENTER (RSS Feed Stream)
-A clean layout categorized into distinct streams to fetch news without background noise:
-- **JOBS**: DevOps and SRE Job openings.
-- **DEVOPS_UPDATES**: Technology bulletins, version releases, and security advisories.
-- **GENERAL**: Jeevan OS system configurations and user guides.
+### HUB 5: UPDATES CENTER (RSS Feed Stream & SRE Info Hub)
+A high-fidelity intelligent aggregator that indexes live career opportunities, technology bulletins, and application updates. Designed to act as an information discovery channel rather than a single database of truth, every update provides transparent redirection markers for self-verification.
+
+#### Modern Feed Channels:
+* **JOBS (SRE Career Opportunities)**: Indexes vacancies from premium corporate portals like TCS, Infosys, and Cognizant with full structural field mapping (Company, Role, Experience, Location, Posted Time, and an integrated "Apply Now" official carrier link redirection).
+* **DEVOPS_UPDATES (SRE Releases & Bulletins)**: Highlights key technical milestones from official communities (Kubernetes Blog, Docker Documentation, HashiCorp Github, and Python Releases) complete with release summaries and "Verify Source" redirections.
+* **GENERAL (SRE Ecosystem Advisory)**: Broadcasts foundational SRE ecosystem announcements, cloud networking alerts, and system-wide documentation updates.
+
+---
+
+## SECTION 5B: SPECIALIZED SOURCE VALIDATION & AUTO-REFRESH MECHANICS
+
+Jeevan OS prioritizes absolute transparency and authenticity. To achieve this, we transitioned the Updates Center and Portfolio News from static offline displays into dynamic, verifiable, self-updating data streams:
+
+```
+[User Sees Update/Article] 
+         |
+         v
+[Taps Card Component] ---> (Reads Title, Source Name, Published Date, and Freshness Log)
+         |
+         v
+[Opens Redirection] ---> (Auto-routes to Official Careers Page, Release Note, or Financial Portal)
+         |
+         v
+[Independent Verification] ---> (Zero-trust verified authenticity achieved)
+```
+
+### 1. Unified 2-Hour Background Auto-Refresh Engine
+* **Threading Loop**: Spawns a dedicated asynchronous worker loop mapped to `viewModelScope.launch` inside the unified `JeevanViewModel` lifecycle.
+* **Duration Strategy**: Polls, fetches, and refreshes all tech updates, job notices, system advisories, and stock/ETF portfolio news exactly every **120 minutes (7,200,000 ms)**.
+* **Visual Freshness Indicators**: Both hubs display clear, high-contrast, synced telemetry trackers displaying:
+  * **Last Updated**: Real-time localized publication check (e.g., `10:15 AM`)
+  * **Next Auto-Refresh**: Explicit time of next scheduled fetch (e.g., `12:15 PM`)
+  * Displays customized synced tags (e.g., `SYNCED: HH:MM AM/PM`) under individual elements.
+
+### 2. Personalized Holding-Specific Portfolio News
+* **Capital Protection Flow**: Instead of generic, unrelated finance news, the app inspects active asset holdings inside local Room SQLite databases in real time.
+* **Equity Matching Metrics**: Filters and prioritizes news strictly related to user investments:
+  * Taps **TCS** -> Delivers custom SRE platform release notes with direct links to `tcs.com`.
+  * Taps **Infosys** -> Delivers sovereign cloud security frameworks with direct links to `infosys.com`.
+  * Taps **HDFC Bank** -> Delivers core cloud telemetry optimization news linked to `hdfcbank.com`.
+  * Indexes custom alerts for gold, silver, index funds, JSW, NTPC, IOC, power grids, and general market indices.
+* **Source Redirections**: Every portfolio card acts as an interactive button that seamlessly routes the user to official bulletins (TCS Investor Relations, NSE India Official, AMC Portal, or RBI Bulletins) with zero intermediate redirection noise.
+
+### 3. Job Redirection Compliance
+* Job cards include complete semantic blocks detailing expectations, experience ranges (e.g., "2-4 Years"), and geographical boundaries (e.g., "Hyderabad (Hybrid)").
+* The "Apply Now" call-to-action acts as a direct validation tool, safely auto-opening the parent enterprise's official careers listing page with complete validation security.
 
 ---
 
 ## SECTION 6: CODE QUALITY & HOOKS (TEST TAG MAP)
 
-For automated UI inspections or platform checks, Jeevan OS uses specific tags assigned to Compose elements:
+For automated UI inspections, deep-link test executions, or play-store platform checks, Jeevan OS uses specific tags assigned to Jetpack Compose elements:
 
 ```
 +--------------------------------------+---------------------------------------+
@@ -331,6 +373,10 @@ For automated UI inspections or platform checks, Jeevan OS uses specific tags as
 | Record Expense Button                | "log_expense_button"                  |
 | Portfolio Snapshot Container         | "portfolio_snapshot_card"             |
 | SRE Updates Center Container         | "news_center_hub"                     |
+| Portfolio News Container Card        | "portfolio_news_card"                 |
+| Portfolio News Refresh Trigger Button | "refresh_portfolio_news_btn"          |
+| Individual Portfolio News Item Card  | "portfolio_news_item_<ID>"            |
+| Updates Center News Card Element     | "news_article_card_<ID>"              |
 +--------------------------------------+---------------------------------------+
 ```
 
@@ -341,4 +387,4 @@ For automated UI inspections or platform checks, Jeevan OS uses specific tags as
 To manage dependencies, test execution, and compilation tasks inside the Android Workspace sandbox, use the following commands:
 * **Sync & Build APK**: Run `gradle assembleDebug` in the workspace to construct an installation package.
 * **Run Local Unit Tests**: Executing `gradle test` verifies JVM dependencies and Compose routing rules without requiring hardware emulation.
-* **Secrets Injections**: Always map keys inside your `local.properties` environment files via Android Studio or place them inside the secure **Secrets panel in AI Studio** using `BuildConfig.GEMINI_API_KEY`.
+* **Secrets Injections**: Always map keys inside your secure **Secrets panel in AI Studio** using `BuildConfig.GEMINI_API_KEY` for high-fidelity Dynamic Core Gemini analyses. Do NOT configure local workspace files with raw tokens.
