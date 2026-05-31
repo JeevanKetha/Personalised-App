@@ -329,7 +329,8 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     fun prefillSuggestAnswer(subtopicId: String, questionIndex: Int) {
         val suggestAnswer = when {
             subtopicId.startsWith("week_") -> {
-                val weekNum = subtopicId.substringAfter("week_").toIntOrNull() ?: 1
+                val weekNumStr = subtopicId.substringAfter("week_").substringBefore("_day_")
+                val weekNum = weekNumStr.toIntOrNull() ?: 1
                 when (questionIndex) {
                     0 -> "For Week $weekNum study topics, we prioritize optimal configuration setups, robust vulnerability mitigation, and continuous telemetry monitoring to prevent system downtime."
                     1 -> "In implementing production automation pipelines, we utilize isolated states, declarative resources orchestration templates, and strict network security group parameters."
@@ -1105,9 +1106,16 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 if (weekNum in 1..28) {
                     val daysInWeek = (1..7).map { "week_${weekNum}_day_$it" }
                     val currentProgressList = repository.getAllSubtopicProgressDirect()
-                    val completedDaysCount = currentProgressList.count { it.subtopicId in daysInWeek && it.isCompleted }
-                    if (completedDaysCount >= 7) {
+                    var completedCount = currentProgressList.count { it.subtopicId in daysInWeek && it.isCompleted && it.subtopicId != subtopicId }
+                    if (isCompleted) {
+                        completedCount += 1
+                    }
+                    if (completedCount >= 7) {
                         repository.saveSubtopicProgress("week_$weekNum", parentTopicId, true, "Completed All Days", 0)
+                    } else {
+                        if (!isCompleted) {
+                            repository.saveSubtopicProgress("week_$weekNum", parentTopicId, false, "Day reset", 0)
+                        }
                     }
                 }
             }
