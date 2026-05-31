@@ -93,3 +93,15 @@ data class CareerGoalFund(
     val targetAmount: Double,
     val currentAmount: Double
 )
+
+@Entity(tableName = "saved_resources")
+data class SavedResource(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val type: String, // e.g. "URL", "PDF", "DOCX", "Image", "Video Link", "GitHub Repository", "Notes", "Certifications"
+    val description: String = "",
+    val linkOrPath: String = "",
+    val source: String = "",
+    val dateAdded: String = "" // formatted date like "12-Jun-2026"
+)
+
