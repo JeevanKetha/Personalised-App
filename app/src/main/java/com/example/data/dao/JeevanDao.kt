@@ -97,6 +97,9 @@ interface JeevanDao {
     @Query("SELECT * FROM career_goal_funds")
     fun getAllCareerGoalFundsFlow(): Flow<List<CareerGoalFund>>
 
+    @Query("SELECT * FROM career_goal_funds")
+    suspend fun getAllCareerGoalFundsDirect(): List<CareerGoalFund>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCareerGoalFund(fund: CareerGoalFund)
 
@@ -105,4 +108,8 @@ interface JeevanDao {
 
     @Delete
     suspend fun deleteCareerGoalFund(fund: CareerGoalFund)
+
+    // --- News Bookmarks Direct ---
+    @Query("SELECT * FROM news_bookmarks")
+    suspend fun getAllNewsBookmarksDirect(): List<NewsBookmark>
 }
