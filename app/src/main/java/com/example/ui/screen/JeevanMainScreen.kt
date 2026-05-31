@@ -435,14 +435,10 @@ fun DashboardHub(viewModel: JeevanViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        val deviceHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                        val deviceGreeting = when {
-                            deviceHour < 12 -> "Good morning"
-                            deviceHour < 17 -> "Good afternoon"
-                            else -> "Good evening"
-                        }
+                        val deviceGreetingState by viewModel.deviceGreeting.collectAsState()
+                        val displayGreeting = deviceGreetingState.ifBlank { viewModel.calculateGreeting() }
                         Text(
-                            text = "$deviceGreeting, ${userProfile.name}.",
+                            text = "$displayGreeting, ${userProfile.name}.",
                             color = ImmersiveTextPrimary,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
@@ -570,189 +566,6 @@ fun DashboardHub(viewModel: JeevanViewModel) {
                         fontSize = 12.sp,
                         lineHeight = 16.sp
                     )
-                }
-            }
-        }
-
-        // Knowledge Journal
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "KNOWLEDGE JOURNAL",
-                    color = ImmersiveTextMuted,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.8.sp
-                )
-                Text(
-                    text = if (showAddNewsView) "Close Panel" else "+ Add Article",
-                    color = ImmersiveIndigo,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { showAddNewsView = !showAddNewsView }
-                )
-            }
-        }
-
-        if (showAddNewsView) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
-                    border = BorderStroke(1.dp, ImmersiveIndigo.copy(alpha = 0.3f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("ARCHIVE WORKSPACE DEVOPS METRICS", color = ImmersiveTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = newsTitle,
-                            onValueChange = { newsTitle = it },
-                            label = { Text("Title", fontSize = 11.sp) },
-                            modifier = Modifier.fillMaxWidth().testTag("news_title_input"),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = ImmersiveIndigo,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text("Category Index:", color = ImmersiveTextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            listOf("System", "Refactoring", "Best Practices").forEach { cat ->
-                                val selected = newsCat == cat
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(if (selected) ImmersiveIndigo else ImmersiveSurface)
-                                        .border(0.5.dp, if (selected) CyberCyan else Color.White.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                                        .clickable { newsCat = cat }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Text(cat.uppercase(), color = if (selected) Color.White else TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = newsUrl,
-                            onValueChange = { newsUrl = it },
-                            label = { Text("URL / Resource Node", fontSize = 11.sp) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = ImmersiveIndigo,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = newsDesc,
-                            onValueChange = { newsDesc = it },
-                            label = { Text("Insights / Key updates", fontSize = 11.sp) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = ImmersiveIndigo,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                if (newsTitle.isNotBlank() && newsDesc.isNotBlank()) {
-                                    viewModel.bookmarkNews(newsTitle, newsCat, newsUrl, newsDesc)
-                                    newsTitle = ""
-                                    newsUrl = ""
-                                    newsDesc = ""
-                                    showAddNewsView = false
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo),
-                            modifier = Modifier.fillMaxWidth().testTag("news_submit_button")
-                        ) {
-                            Text("Bookmark into Local Journal", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // List Bookmarks
-        if (newsBookmarks.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No articles bookmarked in database.", color = ImmersiveTextMuted, fontSize = 11.sp)
-                }
-            }
-        } else {
-            items(newsBookmarks) { news ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.04f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(
-                                text = news.title,
-                                color = ImmersiveTextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(0.85f)
-                            )
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Remove bookmark",
-                                tint = ImmersiveRose.copy(alpha = 0.6f),
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clickable { viewModel.removeNewsBookmark(news) }
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(ImmersiveIndigo.copy(alpha = 0.15f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(news.category.uppercase(), color = ImmersiveIndigo, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
-                            if (news.url.isNotBlank()) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = news.url,
-                                    color = ImmersiveTextMuted,
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = news.description,
-                            color = ImmersiveTextPrimary,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp
-                        )
-                    }
                 }
             }
         }
@@ -1231,232 +1044,6 @@ fun FinanceHub(viewModel: JeevanViewModel) {
                         Row(modifier = Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {
                             Text("• ", color = ImmersiveEmerald, fontSize = 10.sp)
                             Text(text = rec, color = ImmersiveTextMuted, fontSize = 10.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // INTEGRATED CAREER INVESTMENT GOALS
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Build,
-                        contentDescription = "Career Savings Icon",
-                        tint = ImmersiveAmber,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "CAREER INVESTMENT GOALS",
-                        color = ImmersiveTextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    text = if (showAddGoalPanel) "Cancel" else "+ Add Goal",
-                    color = ImmersiveAmber,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { showAddGoalPanel = !showAddGoalPanel }
-                )
-            }
-        }
-
-        if (showAddGoalPanel) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
-                    border = BorderStroke(1.dp, ImmersiveAmber.copy(alpha = 0.3f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("ESTABLISH CAREER TARGET FUND", color = ImmersiveAmber, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = newGoalName,
-                            onValueChange = { newGoalName = it },
-                            label = { Text("Goal Name (e.g. AWS Certification)", fontSize = 11.sp) },
-                            modifier = Modifier.fillMaxWidth().testTag("career_goal_name_input"),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = ImmersiveAmber,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedTextField(
-                                value = newGoalTarget,
-                                onValueChange = { newGoalTarget = it },
-                                label = { Text("Target (₹)", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f).testTag("career_goal_target_input"),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = ImmersiveAmber,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-                            OutlinedTextField(
-                                value = newGoalCurrent,
-                                onValueChange = { newGoalCurrent = it },
-                                label = { Text("Current Initial Saved (₹)", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f).testTag("career_goal_current_input"),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = ImmersiveAmber,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                val targetAmt = newGoalTarget.toDoubleOrNull() ?: 0.0
-                                val curAmt = newGoalCurrent.toDoubleOrNull() ?: 0.0
-                                if (newGoalName.isNotBlank() && targetAmt > 0) {
-                                    viewModel.addCareerGoalFund(newGoalName, targetAmt, curAmt)
-                                    newGoalName = ""
-                                    newGoalTarget = ""
-                                    newGoalCurrent = ""
-                                    showAddGoalPanel = false
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveAmber),
-                            modifier = Modifier.fillMaxWidth().testTag("career_goal_add_button")
-                        ) {
-                            Text("Spawn Target Fund", color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Render Career Goal Funds Items
-        if (careerGoalFunds.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No career investment funds established.", color = TextMuted, fontSize = 11.sp)
-                }
-            }
-        } else {
-            items(careerGoalFunds) { fund ->
-                val progressRatio = (fund.currentAmount / fund.targetAmount).coerceIn(0.0, 1.0)
-                val isCompleted = fund.currentAmount >= fund.targetAmount
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                    border = BorderStroke(0.6.dp, ImmersiveAmber.copy(alpha = 0.15f))
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(text = fund.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    if (isCompleted) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(3.dp))
-                                                .background(ImmersiveEmerald.copy(alpha = 0.15f))
-                                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                                        ) {
-                                            Text("SECURED", color = ImmersiveEmerald, fontSize = 7.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                                Text(
-                                    text = "Saved: ₹${fund.currentAmount} / Target: ₹${fund.targetAmount}",
-                                    color = TextMuted,
-                                    fontSize = 10.sp
-                                )
-                            }
-                            IconButton(
-                                onClick = { viewModel.deleteCareerGoalFund(fund) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete Career Fund",
-                                    tint = ImmersiveRose.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LinearProgressIndicator(
-                                progress = progressRatio.toFloat(),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp)),
-                                color = ImmersiveAmber,
-                                trackColor = ImmersiveSurfaceVariant
-                            )
-                            Text(
-                                text = "${(progressRatio * 100).toInt()}%",
-                                color = ImmersiveAmber,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-
-                        // Funding shortcut keys
-                        if (!isCompleted) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                val option1 = 1000.0
-                                val option2 = 5000.0
-                                val canFundOpt1 = userProfile.balanceAmount >= option1
-                                val canFundOpt2 = userProfile.balanceAmount >= option2
-
-                                Button(
-                                    onClick = { viewModel.contributeToCareerGoal(fund, option1) },
-                                    enabled = canFundOpt1,
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = ImmersiveAmber.copy(alpha = 0.15f),
-                                        contentColor = ImmersiveAmber
-                                    ),
-                                    shape = RoundedCornerShape(4.dp),
-                                    contentPadding = PaddingValues(2.dp)
-                                ) {
-                                    Text("+ Dedux ₹1,000", fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                                }
-
-                                Button(
-                                    onClick = { viewModel.contributeToCareerGoal(fund, option2) },
-                                    enabled = canFundOpt2,
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = ImmersiveAmber.copy(alpha = 0.15f),
-                                        contentColor = ImmersiveAmber
-                                    ),
-                                    shape = RoundedCornerShape(4.dp),
-                                    contentPadding = PaddingValues(2.dp)
-                                ) {
-                                    Text("+ Dedux ₹5,000", fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
                         }
                     }
                 }
@@ -4107,6 +3694,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
 
         // SEASONAL INTELLIGENCE & ADAPTIVE MICRO ADVICE
         item {
+            val seasonalIntelligence by viewModel.seasonalIntelligenceText.collectAsState()
             Card(
                 colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
                 border = BorderStroke(1.dp, ImmersiveAmber.copy(alpha = 0.25f))
@@ -4121,9 +3709,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Location status: New Delhi (Warm Summer season active).\n" +
-                        "Suggested foods: Local cucumber grids, light yogurt fluids, cooling watermelon plates.\n" +
-                        "Seasonal dehydration danger coefficient: 85%. Increase target water intake to 3500ml.",
+                        text = seasonalIntelligence,
                         color = TextCelestial,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
@@ -4233,13 +3819,43 @@ fun HealthHub(viewModel: JeevanViewModel) {
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "OFFICE WORKOUT SCHEME (ADAPTED)",
-                        color = ImmersiveIndigo,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "OFFICE WORKOUT SCHEME (ADAPTED)",
+                            color = ImmersiveIndigo,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(ImmersiveIndigo.copy(alpha = 0.15f))
+                                .clickable { viewModel.manualRefreshWorkoutPlan() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .testTag("refresh_workout_plan_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Manual Refresh",
+                                    tint = ImmersiveIndigo,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Refresh",
+                                    color = ImmersiveIndigo,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     val exercises = adaptiveWorkouts.ifEmpty {
                         listOf(

@@ -20,6 +20,7 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
     val allNewsBookmarks: Flow<List<NewsBookmark>> = jeevanDao.getAllNewsBookmarksFlow()
     val allPortfolioHoldings: Flow<List<PortfolioHolding>> = jeevanDao.getAllPortfolioHoldingsFlow()
     val allCareerGoalFunds: Flow<List<CareerGoalFund>> = jeevanDao.getAllCareerGoalFundsFlow()
+    val allSavedResources: Flow<List<SavedResource>> = jeevanDao.getAllSavedResourcesFlow()
 
     // --- Profile Management ---
     suspend fun getOrInitUserProfile(): UserProfile = withContext(Dispatchers.IO) {
@@ -156,6 +157,23 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
         if (isCompleted) {
             addXpToTopic(parentTopicId, 40) // Award 40 XP for subtopic validation
         }
+    }
+
+    suspend fun getAllSubtopicProgressDirect(): List<SubtopicProgress> = withContext(Dispatchers.IO) {
+        jeevanDao.getAllSubtopicProgressDirect()
+    }
+
+    // --- Saved Resources ---
+    suspend fun saveResource(resource: SavedResource): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.insertSavedResource(resource)
+    }
+
+    suspend fun deleteResource(resource: SavedResource): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.deleteSavedResource(resource)
+    }
+
+    suspend fun getAllSavedResourcesDirect(): List<SavedResource> = withContext(Dispatchers.IO) {
+        jeevanDao.getAllSavedResourcesDirect()
     }
 
     // --- News Bookmarks ---

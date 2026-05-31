@@ -34,6 +34,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     val newsBookmarks: StateFlow<List<NewsBookmark>>
     val portfolioHoldings: StateFlow<List<PortfolioHolding>>
     val careerGoalFunds: StateFlow<List<CareerGoalFund>>
+    val savedResources: StateFlow<List<SavedResource>>
 
     // --- UI Interactive States ---
     private val _isBrainThinking = MutableStateFlow(false)
@@ -54,6 +55,20 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     val isNewsRefreshing: StateFlow<Boolean> = _isNewsRefreshing
 
     // --- Dynamic Biometrics & Portfolio News States ---
+    private val _deviceGreeting = MutableStateFlow("")
+    val deviceGreeting: StateFlow<String> = _deviceGreeting
+
+    fun calculateGreeting(): String {
+        val calendar = Calendar.getInstance()
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        return when {
+            hour in 5..11 -> "Good Morning"
+            hour in 12..16 -> "Good Afternoon"
+            hour in 17..20 -> "Good Evening"
+            else -> "Good Night"
+        }
+    }
+
     private val _adaptiveWorkouts = MutableStateFlow<List<String>>(listOf(
         "Squats: 3 sets x 15 reps (adapted for standard stability)",
         "Desk Pushups: 3 sets x 12 reps (shoulder posture base)",
@@ -790,6 +805,9 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         careerGoalFunds = repository.allCareerGoalFunds
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+        savedResources = repository.allSavedResources
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
         // Sync with TimerService background state
         val sharedPrefs = application.getSharedPreferences("jeevan_focus_timer", Context.MODE_PRIVATE)
         val savedDuration = sharedPrefs.getInt("custom_duration_minutes", 25)
@@ -881,6 +899,26 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 timestamp = System.currentTimeMillis()
             )
         )
+
+        // Synchronized real-time greeting updates automatically every 30 seconds
+        viewModelScope.launch {
+            while (true) {
+                _deviceGreeting.value = calculateGreeting()
+                delay(30000)
+            }
+        }
+
+        // Automatic weather and seasonal adaptivity context refresh every 2 hours
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    refreshWeather()
+                } catch (e: Exception) {
+                    // Fail silently
+                }
+                delay(2 * 60 * 60 * 1000) // 2 hours
+            }
+        }
     }
 
     fun setActiveTab(tab: String) {
@@ -1035,10 +1073,44 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // --- SAVED LEARNING RESOURCES ---
+    fun saveResource(name: String, type: String, description: String, linkOrPath: String, source: String, dateAdded: String) {
+        viewModelScope.launch {
+            repository.saveResource(
+                SavedResource(
+                    name = name,
+                    type = type,
+                    description = description,
+                    linkOrPath = linkOrPath,
+                    source = source,
+                    dateAdded = dateAdded
+                )
+            )
+        }
+    }
+
+    fun deleteResource(resource: SavedResource) {
+        viewModelScope.launch {
+            repository.deleteResource(resource)
+        }
+    }
+
     // --- DEVOPS CAREER SUBTOPIC PROGRESS ---
     fun toggleSubtopic(subtopicId: String, parentTopicId: String, isCompleted: Boolean, reason: String? = null, score: Int = 0) {
         viewModelScope.launch {
             repository.saveSubtopicProgress(subtopicId, parentTopicId, isCompleted, reason, score)
+            if (subtopicId.startsWith("week_") && subtopicId.contains("_day_")) {
+                val weekNumStr = subtopicId.substringBefore("_day_").substringAfter("week_")
+                val weekNum = weekNumStr.toIntOrNull() ?: 0
+                if (weekNum in 1..28) {
+                    val daysInWeek = (1..7).map { "week_${weekNum}_day_$it" }
+                    val currentProgressList = repository.getAllSubtopicProgressDirect()
+                    val completedDaysCount = currentProgressList.count { it.subtopicId in daysInWeek && it.isCompleted }
+                    if (completedDaysCount >= 7) {
+                        repository.saveSubtopicProgress("week_$weekNum", parentTopicId, true, "Completed All Days", 0)
+                    }
+                }
+            }
             generateDynamicAIEcosystemInsights()
         }
     }
@@ -1112,25 +1184,44 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
             // Offline fallback adaptive system based on BMI
             val workouts = when {
                 bmi < 18.5 -> listOf(
-                    "Calisthenics Slow Squats: 3 sets x 10 reps (Building core bulk safely)",
-                    "Wall Pushups: 3 sets x 12 reps (Low intensity arm load)",
-                    "Biometric Back Stretch: 5 mins (Desk posture alignment)",
-                    "High Nutrient Snack Walk: 10 mins (Light metabolic activation)"
+                    "Strength Building: Slow Bodyweight Squats - 3 sets x 10 reps (Resistance training for building muscular mass with user weight $weight kg)",
+                    "Resistance Training: Wall Pushups - 3 sets x 12 reps (Low intensity loading adapted for height $height cm)",
+                    "Strength Building: Desk Plank Holds - 3 sets x 30s (Sustained core strength building)",
+                    "Resistance Training: Static Lunge Hold - 3 sets x 15s per side (Targeted lower body resistance)"
                 )
-                bmi > 25.0 -> listOf(
-                    "High-Tempo Air Squats: 4 sets x 20 reps (Aerobic and leg endurance focus)",
-                    "Standard Desk Pushups: 3 sets x 15 reps (Core stability & shoulder relief)",
-                    "Decompression Stretches: 10 mins (Lower spine stress reduction)",
-                    "Paced Corridor Lunges: 3 sets x 10 reps per side (Active burn activation)"
+                bmi >= 25.0 -> listOf(
+                    "Walking: Brisk Office Corridor Walk - 20 mins (Low-impact, cardiorespiratory burn optimized for BMI $bmi)",
+                    "Mobility Work: Desk Decompression Stretches - 10 mins (Relieves lower spine stress for weight $weight kg)",
+                    "Light Cardio: Dynamic Shoulder & Arm Rolls - 5 mins (Aerobic endurance mobility focus)",
+                    "Mobility Work: Seated Torso Twists - 5 mins (Spreading tension relief across joints)"
                 )
                 else -> listOf(
-                    "Explosive Bodyweight Squats: 3 sets x 15 reps (Leg power booster)",
-                    "Floor Pushups / Planks: 3 sets x 12 reps / 45s holds (Chest & Core stability)",
-                    "Interactive Desk Yoga: 10 mins (Full spine & neck tension release)",
-                    "Brisk Office Walk: 30 mins (Sustained cardiorespiratory flow)"
+                    "Strength Exercises: Standard Desk Pushups - 3 sets x 15 reps (Core stability & shoulder relief)",
+                    "Pushups: Floor Pushups or Plank Holds - 3 sets x 12 reps / 45s (Optimized for normal weight)",
+                    "Squats: Bodyweight Deep Squats - 3 sets x 15 reps (Leg power Booster and mobility)",
+                    "Strength Exercises: Tricep Desk Dips - 3 sets x 10 reps (Bench load for upper body tone)"
                 )
             }
             _adaptiveWorkouts.value = workouts
+        }
+    }
+
+    fun manualRefreshWorkoutPlan() {
+        viewModelScope.launch {
+            try {
+                val prof = repository.getOrInitUserProfile()
+                // Recalculate BMI to ensure accuracy
+                val bmiVal = if (prof.heightCm > 0.0) prof.weightKg / ((prof.heightCm / 100.0) * (prof.heightCm / 100.0)) else 0.0
+                val roundedBmi = (bmiVal * 10.0).toInt() / 10.0
+                val updatedProf = prof.copy(computedBmi = roundedBmi)
+                repository.updateUserProfile(updatedProf)
+                
+                // Regenerate based on latest logs and recalculated BMI
+                triggerAdaptiveWorkoutPlan(prof.weightKg, prof.heightCm, roundedBmi)
+                generateDynamicAIEcosystemInsights()
+            } catch (e: Exception) {
+                android.util.Log.e("JeevanViewModel", "Manual workout refresh failed", e)
+            }
         }
     }
 
@@ -1606,6 +1697,43 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     private val _weatherLocationName = MutableStateFlow("Locating...")
     val weatherLocationName: StateFlow<String> = _weatherLocationName
 
+    val seasonalIntelligenceText: StateFlow<String> = kotlinx.coroutines.flow.combine(
+        _weatherLocationName,
+        _weatherTemp
+    ) { loc, temp ->
+        val finalLoc = if (loc == "Loc Off" || loc == "Locating..." || loc == "Locating") "Hyderabad, Telangana" else loc
+        val finalTempStr = if (temp != null) "${temp.toInt()}°C" else "34°C"
+        val finalTemp = temp ?: 34.0
+        val season = when {
+            finalTemp > 30 -> "Summer"
+            finalTemp < 18 -> "Winter"
+            else -> "Spring/Rainy"
+        }
+        
+        val foods = when (season) {
+            "Summer" -> "Local cucumber grids, light yogurt fluids, cooling watermelon plates."
+            "Winter" -> "Warm ginger soups, robust herbal decoctions, hot millet snacks."
+            else -> "Fresh citrus fruits, light steamed sprouts, honey-lemon fluids."
+        }
+        
+        val hydrationDehydrationCoef = when (season) {
+            "Summer" -> 90
+            "Winter" -> 60
+            else -> 75
+        }
+        val waterGoal = when (season) {
+            "Summer" -> 3800
+            "Winter" -> 2500
+            else -> 3000
+        }
+        
+        "Location status: $finalLoc\n" +
+        "Current Weather: $finalTempStr\n" +
+        "Season: $season\n" +
+        "Suggested foods: $foods\n" +
+        "Seasonal dehydration danger coefficient: $hydrationDehydrationCoef%. Increase target water intake to ${waterGoal}ml."
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), "Loading seasonal adaptation intelligence...")
+
     fun refreshWeather() {
         val context = getApplication<Application>()
         _weatherState.value = "LOADING"
@@ -1619,20 +1747,20 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                         if (loc != null) {
                             fetchWeatherForCoordinates(loc.latitude, loc.longitude)
                         } else {
-                            _weatherLocationName.value = "Bengaluru (GPS)"
-                            fetchWeatherForCoordinates(12.9716, 77.5946)
+                            _weatherLocationName.value = "Hyderabad, Telangana"
+                            fetchWeatherForCoordinates(17.3850, 78.4867) // Hyderabad GPS fallback
                         }
                     }.addOnFailureListener {
-                        _weatherLocationName.value = "Bengaluru (GPS)"
-                        fetchWeatherForCoordinates(12.9716, 77.5946)
+                        _weatherLocationName.value = "Hyderabad, Telangana"
+                        fetchWeatherForCoordinates(17.3850, 78.4867)
                     }
                 } else {
                     _weatherLocationName.value = "Loc Off"
                     _weatherState.value = "PERMISSION_REQUIRED"
                 }
             } catch (e: Exception) {
-                _weatherLocationName.value = "Bengaluru (GPS)"
-                fetchWeatherForCoordinates(12.9716, 77.5946)
+                _weatherLocationName.value = "Hyderabad, Telangana"
+                fetchWeatherForCoordinates(17.3850, 78.4867)
             }
         }
     }
@@ -1645,8 +1773,10 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                     val geocoder = Geocoder(context, Locale.getDefault())
                     val addresses = geocoder.getFromLocation(lat, lon, 1)
                     if (!addresses.isNullOrEmpty()) {
-                        val city = addresses[0].locality ?: addresses[0].subAdminArea ?: "Remote Node"
-                        _weatherLocationName.value = city
+                        val addr = addresses[0]
+                        val city = addr.locality ?: addr.subAdminArea ?: "Hyderabad"
+                        val state = addr.adminArea ?: "Telangana"
+                        _weatherLocationName.value = "$city, $state"
                     } else {
                         _weatherLocationName.value = "Grid ${String.format("%.2f", lat)},${String.format("%.2f", lon)}"
                     }

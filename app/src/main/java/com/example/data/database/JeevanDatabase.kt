@@ -13,6 +13,7 @@ import com.example.data.entity.SubtopicProgress
 import com.example.data.entity.NewsBookmark
 import com.example.data.entity.PortfolioHolding
 import com.example.data.entity.CareerGoalFund
+import com.example.data.entity.SavedResource
 
 @Database(
     entities = [
@@ -23,9 +24,10 @@ import com.example.data.entity.CareerGoalFund
         SubtopicProgress::class,
         NewsBookmark::class,
         PortfolioHolding::class,
-        CareerGoalFund::class
+        CareerGoalFund::class,
+        SavedResource::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class JeevanDatabase : RoomDatabase() {

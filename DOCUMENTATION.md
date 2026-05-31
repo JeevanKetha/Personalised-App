@@ -232,10 +232,10 @@ Houses device trackers, primary missions, diagnostics, and a bookmarks dashboard
 ```
 
 #### Playbook Exercises:
-1. **Adding Articles via Knowledge Journal**:
-   - Double-tap "+ Add Article" in the top-right corner.
-   - Enter your Title, Category tags, URL, and key thoughts.
-   - Click "Bookmark into Local Journal" to write immediately into Room.
+1. **Dynamic Workout plan Generation & Manual Refresh**:
+   - Navigate to the Health Hub and check your biometrics under "BIOMETRICS & PHYSICAL INDEXING".
+   - View your customized physical suggestions under "OFFICE WORKOUT SCHEME (ADAPTED)", which are dynamically tailormade for your body mass index.
+   - Click the "+ Refresh" button in the corner to manually trigger recalculations, re-evaluate recent weight statistics and generate a fresh exercise plan anytime.
 
 ---
 

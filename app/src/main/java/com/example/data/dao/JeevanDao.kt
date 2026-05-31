@@ -9,6 +9,7 @@ import com.example.data.entity.SubtopicProgress
 import com.example.data.entity.NewsBookmark
 import com.example.data.entity.PortfolioHolding
 import com.example.data.entity.CareerGoalFund
+import com.example.data.entity.SavedResource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -40,6 +41,9 @@ interface JeevanDao {
     // --- Subtopic Progress Queries ---
     @Query("SELECT * FROM subtopic_progress")
     fun getAllSubtopicProgressFlow(): Flow<List<SubtopicProgress>>
+
+    @Query("SELECT * FROM subtopic_progress")
+    suspend fun getAllSubtopicProgressDirect(): List<SubtopicProgress>
 
     @Query("SELECT * FROM subtopic_progress WHERE parentTopicId = :parentId")
     suspend fun getSubtopicProgressByParent(parentId: String): List<SubtopicProgress>
@@ -112,4 +116,17 @@ interface JeevanDao {
     // --- News Bookmarks Direct ---
     @Query("SELECT * FROM news_bookmarks")
     suspend fun getAllNewsBookmarksDirect(): List<NewsBookmark>
+
+    // --- Saved Resources Queries ---
+    @Query("SELECT * FROM saved_resources ORDER BY id DESC")
+    fun getAllSavedResourcesFlow(): Flow<List<SavedResource>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavedResource(resource: SavedResource)
+
+    @Delete
+    suspend fun deleteSavedResource(resource: SavedResource)
+
+    @Query("SELECT * FROM saved_resources")
+    suspend fun getAllSavedResourcesDirect(): List<SavedResource>
 }
