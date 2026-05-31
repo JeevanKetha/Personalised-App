@@ -42,7 +42,10 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
                 dailyWaterGoalMl = 3000,
                 dailyStepGoal = 8000,
                 careerStreak = 3,
-                balanceAmount = 20000.0
+                balanceAmount = 20000.0,
+                weightKg = 70.0,
+                heightCm = 175.0,
+                computedBmi = 22.8
             )
             jeevanDao.insertUserProfile(initial)
             initial
@@ -274,6 +277,12 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
 
     // --- Seed Demo Data helper if empty ---
     suspend fun seedDemoDataIfEmpty(): Unit = withContext(Dispatchers.IO) {
+        // If "week_1" subtopic is already seeded, the database has been initialized previously.
+        // We skip seeding to prevent deleted portfolio assets or goal funds from reappearing!
+        if (jeevanDao.getSubtopicProgressById("week_1") != null) {
+            return@withContext
+        }
+
         // Initial setup
         getOrInitUserProfile()
 
@@ -309,24 +318,36 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             }
         }
 
-        // Seed subtopics with expanded AWS, Docker, and Kubernetes relational definitions
+        // Seed subtopics with expanded 28-week Ultimate SRE & DevOps roadmap
         val defaultSubtopics = listOf(
-            // AWS subtopics
-            SubtopicProgress("aws_iam", "aws", true, System.currentTimeMillis(), null, 90),
-            SubtopicProgress("aws_ec2", "aws", false, null, "Lack of Time", 0),
-            SubtopicProgress("aws_vpc", "aws", false, null, "Need Revision", 0),
-            SubtopicProgress("aws_s3", "aws", true, System.currentTimeMillis(), null, 85),
-            
-            // Docker subtopics
-            SubtopicProgress("docker_basics", "docker", true, System.currentTimeMillis(), null, 95),
-            SubtopicProgress("docker_images", "docker", true, System.currentTimeMillis(), null, 90),
-            SubtopicProgress("docker_containers", "docker", false, null, "Difficult Topic", 0),
-            SubtopicProgress("docker_volumes", "docker", false, null, "Busy", 0),
-
-            // Kubernetes subtopics
-            SubtopicProgress("k8s_pods", "kubernetes", true, System.currentTimeMillis(), null, 100),
-            SubtopicProgress("k8s_deployments", "kubernetes", false, null, "Need Revision", 0),
-            SubtopicProgress("k8s_services", "kubernetes", false, null, "Lack of Time", 0)
+            SubtopicProgress("week_1", "linux", true, System.currentTimeMillis(), null, 90),
+            SubtopicProgress("week_2", "linux", false, null, "Lack of Time", 0),
+            SubtopicProgress("week_3", "linux", true, System.currentTimeMillis(), null, 85),
+            SubtopicProgress("week_4", "python", false, null, "Busy SRE Workday", 0),
+            SubtopicProgress("week_5", "aws", false, null, "Needs Prep", 0),
+            SubtopicProgress("week_6", "aws", false, null, null, 0),
+            SubtopicProgress("week_7", "aws", false, null, null, 0),
+            SubtopicProgress("week_8", "aws", false, null, null, 0),
+            SubtopicProgress("week_9", "aws", false, null, null, 0),
+            SubtopicProgress("week_10", "aws", false, null, null, 0),
+            SubtopicProgress("week_11", "aws", false, null, null, 0),
+            SubtopicProgress("week_12", "aws", false, null, null, 0),
+            SubtopicProgress("week_13", "aws", false, null, null, 0),
+            SubtopicProgress("week_14", "aws", false, null, null, 0),
+            SubtopicProgress("week_15", "docker", false, null, null, 0),
+            SubtopicProgress("week_16", "docker", false, null, null, 0),
+            SubtopicProgress("week_17", "docker", false, null, null, 0),
+            SubtopicProgress("week_18", "docker", false, null, null, 0),
+            SubtopicProgress("week_19", "docker", false, null, null, 0),
+            SubtopicProgress("week_20", "docker", false, null, null, 0),
+            SubtopicProgress("week_21", "docker", false, null, null, 0),
+            SubtopicProgress("week_22", "kubernetes", false, null, null, 0),
+            SubtopicProgress("week_23", "kubernetes", false, null, null, 0),
+            SubtopicProgress("week_24", "kubernetes", false, null, null, 0),
+            SubtopicProgress("week_25", "kubernetes", false, null, null, 0),
+            SubtopicProgress("week_26", "kubernetes", false, null, null, 0),
+            SubtopicProgress("week_27", "kubernetes", false, null, null, 0),
+            SubtopicProgress("week_28", "kubernetes", false, null, null, 0)
         )
 
         for (sub in defaultSubtopics) {
@@ -357,63 +378,67 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             CareerGoalFund(0, "DevOps Learning Fund", 20000.0, 12000.0)
         )
 
-        if (jeevanDao.getUserProfileDirect()?.id == 1) {
-            // Seed once
+        if (jeevanDao.getAllPortfolioHoldingsDirect().isEmpty()) {
             defaultHoldings.forEach {
                 jeevanDao.insertPortfolioHolding(it)
             }
+        }
+
+        if (jeevanDao.getAllCareerGoalFundsDirect().isEmpty()) {
             defaultCareerGoalFunds.forEach {
                 jeevanDao.insertCareerGoalFund(it)
             }
         }
 
-        // Seed initial news articles
-        val defaultNews = listOf(
-            NewsBookmark(
-                title = "Kubernetes 1.30: Pod Security Standards Graduation",
-                category = "DevOps",
-                url = "https://kubernetes.io/blog/",
-                description = "Details the transition of pod admission systems directly into high-fidelity graduation matrices. Critical migration mandatory for container sandboxes.",
-                savedAt = System.currentTimeMillis() - 86400000
-            ),
-            NewsBookmark(
-                title = "AWS IAM Identity Center Multi-Region Authentication Release",
-                category = "DevOps",
-                url = "https://aws.amazon.com/blogs/",
-                description = "Unveils accelerated directory federation channels across secondary fallback clusters. Zero structural changes required for AWS DevOps pipelines.",
-                savedAt = System.currentTimeMillis() - 172800000
-            ),
-            NewsBookmark(
-                title = "RBI Updates Digital Rupee Wallet Safeguards",
-                category = "Finance",
-                url = "https://rbi.org.in/",
-                description = "Introduces offline localized escrow contracts for purchasing power tracking in compact remote sandboxes.",
-                savedAt = System.currentTimeMillis() - 259200000
-            ),
-            NewsBookmark(
-                title = "Nifty 50 Hits Raw Records Driven by Steady Retail SIP Inflow Boost",
-                category = "Finance",
-                url = "https://moneycontrol.com/",
-                description = "Nifty 50 surges above critical consolidation marks, demonstrating high market integrity. Expert advisors suggest expanding index mutual fund allocations.",
-                savedAt = System.currentTimeMillis() - 364000000
-            ),
-            NewsBookmark(
-                title = "JOB OPENING: TCS Recruiting DevOps SRE Engineers (Chennai/Hyd)",
-                category = "Job Openings",
-                url = "https://tcs.com/careers",
-                description = "TCS is scouting professionals with 1-4 years expertise in Jenkins, Terraform, and Docker. Package: ₹6 - 11 LPA.",
-                savedAt = System.currentTimeMillis() - 43200000
-            ),
-            NewsBookmark(
-                title = "JOB OPENING: CRED Seeking Remote Junior Infrastructure Engineer",
-                category = "Job Openings",
-                url = "https://careers.cred.club/",
-                description = "Scale production systems on AWS, manage Kubernetes clusters, and automate with Python. Exceptional compensation perks.",
-                savedAt = System.currentTimeMillis() - 120000000
+        // Seed initial news articles only if empty
+        if (jeevanDao.getAllNewsBookmarksDirect().isEmpty()) {
+            val defaultNews = listOf(
+                NewsBookmark(
+                    title = "Kubernetes 1.30: Pod Security Standards Graduation",
+                    category = "DevOps",
+                    url = "https://kubernetes.io/blog/",
+                    description = "Details the transition of pod admission systems directly into high-fidelity graduation matrices. Critical migration mandatory for container sandboxes.",
+                    savedAt = System.currentTimeMillis() - 86400000
+                ),
+                NewsBookmark(
+                    title = "AWS IAM Identity Center Multi-Region Authentication Release",
+                    category = "DevOps",
+                    url = "https://aws.amazon.com/blogs/",
+                    description = "Unveils accelerated directory federation channels across secondary fallback clusters. Zero structural changes required for AWS DevOps pipelines.",
+                    savedAt = System.currentTimeMillis() - 172800000
+                ),
+                NewsBookmark(
+                    title = "RBI Updates Digital Rupee Wallet Safeguards",
+                    category = "Finance",
+                    url = "https://rbi.org.in/",
+                    description = "Introduces offline localized escrow contracts for purchasing power tracking in compact remote sandboxes.",
+                    savedAt = System.currentTimeMillis() - 259200000
+                ),
+                NewsBookmark(
+                    title = "Nifty 50 Hits Raw Records Driven by Steady Retail SIP Inflow Boost",
+                    category = "Finance",
+                    url = "https://moneycontrol.com/",
+                    description = "Nifty 50 surges above critical consolidation marks, demonstrating high market integrity. Expert advisors suggest expanding index mutual fund allocations.",
+                    savedAt = System.currentTimeMillis() - 364000000
+                ),
+                NewsBookmark(
+                    title = "JOB OPENING: TCS Recruiting DevOps SRE Engineers (Chennai/Hyd)",
+                    category = "Job Openings",
+                    url = "https://tcs.com/careers",
+                    description = "TCS is scouting professionals with 1-4 years expertise in Jenkins, Terraform, and Docker. Package: ₹6 - 11 LPA.",
+                    savedAt = System.currentTimeMillis() - 43200000
+                ),
+                NewsBookmark(
+                    title = "JOB OPENING: CRED Seeking Remote Junior Infrastructure Engineer",
+                    category = "Job Openings",
+                    url = "https://careers.cred.club/",
+                    description = "Scale production systems on AWS, manage Kubernetes clusters, and automate with Python. Exceptional compensation perks.",
+                    savedAt = System.currentTimeMillis() - 120000000
+                )
             )
-        )
-        defaultNews.forEach {
-            jeevanDao.insertNewsBookmark(it)
+            defaultNews.forEach {
+                jeevanDao.insertNewsBookmark(it)
+            }
         }
     }
 }

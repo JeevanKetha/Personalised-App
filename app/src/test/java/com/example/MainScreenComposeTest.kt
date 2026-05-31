@@ -39,7 +39,7 @@ class MainScreenComposeTest {
         viewModel.setActiveTab("FINANCE")
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("wealth_assets_card").assertExists()
+        composeTestRule.onNodeWithTag("portfolio_snapshot_card").assertExists()
 
         // 3. Direct set to Career tab, advance clock past transition, wait for DB seed, and verify
         viewModel.setActiveTab("CAREER")
@@ -49,22 +49,24 @@ class MainScreenComposeTest {
         // Wait up to 5000ms for database seeding to complete in background task
         composeTestRule.waitUntil(timeoutMillis = 5000) {
             try {
-                composeTestRule.onNodeWithTag("toggle_core_linux").assertExists()
+                composeTestRule.onNodeWithTag("career_scaffold_list").assertExists()
                 true
             } catch (e: AssertionError) {
                 false
             }
         }
-        composeTestRule.onNodeWithTag("toggle_core_linux").assertExists()
+        composeTestRule.onNodeWithTag("career_scaffold_list").assertExists()
 
         // 4. Direct set to Health tab and verify
         viewModel.setActiveTab("HEALTH")
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("start_timer_button").assertExists()
 
-        // 5. Direct set to Brain tab and verify
-        viewModel.setActiveTab("BRAIN")
+        // 5. Direct set to News tab and verify
+        viewModel.setActiveTab("NEWS")
         composeTestRule.mainClock.advanceTimeBy(500)
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("news_center_hub").assertExists()
     }
 }

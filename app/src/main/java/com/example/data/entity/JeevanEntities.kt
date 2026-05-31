@@ -45,7 +45,10 @@ data class UserProfile(
     val dailyWaterGoalMl: Int = 3000,
     val dailyStepGoal: Int = 8000,
     val careerStreak: Int = 1,
-    val balanceAmount: Double = 20000.0
+    val balanceAmount: Double = 20000.0,
+    val weightKg: Double = 70.0,
+    val heightCm: Double = 175.0,
+    val computedBmi: Double = 22.8
 )
 
 @Entity(tableName = "subtopic_progress")

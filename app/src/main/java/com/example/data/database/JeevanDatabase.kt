@@ -25,7 +25,7 @@ import com.example.data.entity.CareerGoalFund
         PortfolioHolding::class,
         CareerGoalFund::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class JeevanDatabase : RoomDatabase() {

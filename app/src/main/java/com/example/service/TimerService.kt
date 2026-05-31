@@ -96,14 +96,24 @@ class TimerService : Service() {
             .putLong("end_time", endTime)
             .apply()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                buildNotification("Focus session initialized. Remain in flow.", secondsRemaining),
-                1073741824 // ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification("Focus session initialized. Remain in flow.", secondsRemaining))
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification("Focus session initialized. Remain in flow.", secondsRemaining),
+                    1073741824 // ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification("Focus session initialized. Remain in flow.", secondsRemaining))
+            }
+        } catch (e: Exception) {
+            Log.e("TimerService", "Failed to start foreground service", e)
+            try {
+                // Try fallback without specifying type
+                startForeground(NOTIFICATION_ID, buildNotification("Focus session initialized. Remain in flow.", secondsRemaining))
+            } catch (ex: Exception) {
+                Log.e("TimerService", "Failed to start fallback foreground service", ex)
+            }
         }
 
         timerJob?.cancel()
@@ -162,12 +172,18 @@ class TimerService : Service() {
         val prefs = getSharedPreferences("jeevan_focus_timer", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("is_active", false).putLong("end_time", 0).apply()
 
-        val vibe = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibe.vibrate(VibrationEffect.createOneShot(1200, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            vibe.vibrate(1200)
+        try {
+            val vibe = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            vibe?.let {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    it.vibrate(VibrationEffect.createOneShot(1200, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    it.vibrate(1200)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("TimerService", "Failed to vibrate device", e)
         }
 
         // Play alarm ringtone sound
@@ -203,7 +219,11 @@ class TimerService : Service() {
 
         notificationManager.notify(NOTIFICATION_ID, builder.build())
         onFinishedCallback?.invoke()
-        stopForeground(false)
+        try {
+            stopForeground(false)
+        } catch (e: Exception) {
+            Log.e("TimerService", "Failed to stop foreground", e)
+        }
     }
 
     private fun buildNotification(text: String, seconds: Int): Notification {
