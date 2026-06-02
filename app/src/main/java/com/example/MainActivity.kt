@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.data.SecurePrefsManager.init(this)
         enableEdgeToEdge()
 
         // Request runtime notification permission for Android 13+ (API 33+)

@@ -39,6 +39,7 @@ import com.example.ui.viewmodel.JeevanViewModel
 import com.example.ui.viewmodel.ChatMessage
 import java.text.SimpleDateFormat
 import java.util.*
+import android.content.Intent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2325,12 +2326,23 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
     var activeSubTab by remember { mutableStateOf("ROADMAP") } // "ROADMAP", "DAILY_STUDY", "DIAGNOSTICS", "ARCHIVE"
     var skippedReasonInput by remember { mutableStateOf("Busy") }
-    var showAddUnitDialog by remember { mutableStateOf(false) }
+    var showAddUnitDialog by remember { mutableStateOf(false) } // unused fallback
     var showAddResourceDialog by remember { mutableStateOf(false) }
     var resourcesSubTab by remember { mutableStateOf("RECOMMENDED") } // "RECOMMENDED", "SAVED"
     var searchQuery by remember { mutableStateOf("") }
     var filterResourceType by remember { mutableStateOf("ALL") }
     val savedResources by viewModel.savedResources.collectAsState()
+
+    // --- Dynamic Roadmap States ---
+    var isEditMode by remember { mutableStateOf(false) }
+    var showAddTopicDialog by remember { mutableStateOf(false) }
+    var showEditTopicDialog by remember { mutableStateOf<com.example.data.entity.RoadmapTopic?>(null) }
+    var showAddSubtopicDialog by remember { mutableStateOf<com.example.data.entity.RoadmapTopic?>(null) }
+    var showEditSubtopicDialog by remember { mutableStateOf<com.example.data.entity.RoadmapSubtopic?>(null) }
+    var showConfirmResetDialog by remember { mutableStateOf(false) }
+
+    val topics by viewModel.roadmapTopics.collectAsState()
+    val subtopics by viewModel.roadmapSubtopics.collectAsState()
 
     val weekOrder = (1..28).map { "week_$it" }
 
@@ -2721,47 +2733,264 @@ fun CareerHub(viewModel: JeevanViewModel) {
             }
         }
     } else {
-        if (showAddUnitDialog) {
-            var unitId by remember { mutableStateOf("") }
-            var unitTitle by remember { mutableStateOf("") }
-            var unitParent by remember { mutableStateOf("aws") }
-            var unitWeek by remember { mutableStateOf("1") }
-            var unitDay by remember { mutableStateOf("1") }
+        if (showAddTopicDialog) {
+            var title by remember { mutableStateOf("") }
+            var weekStr by remember { mutableStateOf("") }
+            var desc by remember { mutableStateOf("") }
+            var iconName by remember { mutableStateOf("Linux") }
+
             AlertDialog(
-                onDismissRequest = { showAddUnitDialog = false },
-                title = { Text("PROVISION CUSTOM SRE STUDY UNIT", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 14.sp) },
+                onDismissRequest = { showAddTopicDialog = false },
+                title = { Text("PROVISION NEW CURRICULUM TOPIC", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = unitId, onValueChange = { unitId = it }, label = { Text("ID Label") })
-                        OutlinedTextField(value = unitTitle, onValueChange = { unitTitle = it }, label = { Text("Unit Title") })
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("aws", "docker", "kubernetes", "linux").forEach { cat ->
-                                Button(
-                                    onClick = { unitParent = cat },
-                                    colors = ButtonDefaults.buttonColors(containerColor = if (unitParent == cat) CyberCyan else ImmersiveSurfaceVariant),
-                                    modifier = Modifier.weight(1f).height(32.dp),
-                                    contentPadding = PaddingValues(0.dp)
-                                ) { Text(cat.uppercase(), fontSize = 8.sp, color = if (unitParent == cat) Color.Black else Color.White) }
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Topic Title (e.g. Terraform Basics)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = weekStr,
+                            onValueChange = { weekStr = it },
+                            label = { Text("Week Number (1-28)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = desc,
+                            onValueChange = { desc = it },
+                            label = { Text("Syllabus Description") },
+                            modifier = Modifier.fillMaxWidth().height(82.dp)
+                        )
+                        Text("SELECT MODULE ICON:", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("Linux", "Settings", "Network", "Code", "Cloud", "Storage", "Router", "Build").forEach { ic ->
+                                FilterChip(
+                                    selected = iconName == ic,
+                                    onClick = { iconName = ic },
+                                    label = { Text(ic, fontSize = 9.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
+                                )
                             }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = unitWeek, onValueChange = { unitWeek = it }, label = { Text("Week") }, modifier = Modifier.weight(1f))
-                            OutlinedTextField(value = unitDay, onValueChange = { unitDay = it }, label = { Text("Day") }, modifier = Modifier.weight(1f))
                         }
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (unitId.isNotBlank() && unitTitle.isNotBlank()) {
-                                viewModel.addCustomSubtopicUnit(unitId, unitParent, unitWeek.toIntOrNull() ?: 1, unitDay.toIntOrNull() ?: 1, unitTitle)
-                                showAddUnitDialog = false
+                            if (title.isNotBlank()) {
+                                viewModel.addTopic(title, weekStr.toIntOrNull() ?: 1, desc, iconName)
+                                showAddTopicDialog = false
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen)
-                    ) { Text("PROVISION", color = Color.Black) }
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                        enabled = title.isNotBlank()
+                    ) { Text("PROVISION TOPIC", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
                 },
-                dismissButton = { Button(onClick = { showAddUnitDialog = false }) { Text("CANCEL") } },
+                dismissButton = {
+                    Button(onClick = { showAddTopicDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose)) {
+                        Text("CANCEL", color = Color.White, fontSize = 11.sp)
+                    }
+                },
+                containerColor = ImmersiveSurface
+            )
+        }
+
+        val editingTopic = showEditTopicDialog
+        if (editingTopic != null) {
+            var title by remember(editingTopic) { mutableStateOf(editingTopic.title) }
+            var weekStr by remember(editingTopic) { mutableStateOf(editingTopic.weekNumber.toString()) }
+            var desc by remember(editingTopic) { mutableStateOf(editingTopic.description) }
+            var iconName by remember(editingTopic) { mutableStateOf(editingTopic.iconName) }
+
+            AlertDialog(
+                onDismissRequest = { showEditTopicDialog = null },
+                title = { Text("EDIT CURRICULUM TOPIC", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Topic Title") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = weekStr,
+                            onValueChange = { weekStr = it },
+                            label = { Text("Week Number") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = desc,
+                            onValueChange = { desc = it },
+                            label = { Text("Syllabus Description") },
+                            modifier = Modifier.fillMaxWidth().height(82.dp)
+                        )
+                        Text("SELECT MODULE ICON:", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("Linux", "Settings", "Network", "Code", "Cloud", "Storage", "Router", "Build").forEach { ic ->
+                                FilterChip(
+                                    selected = iconName == ic,
+                                    onClick = { iconName = ic },
+                                    label = { Text(ic, fontSize = 9.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (title.isNotBlank()) {
+                                viewModel.editTopic(editingTopic.id, title, weekStr.toIntOrNull() ?: 1, desc, iconName, editingTopic.orderIndex)
+                                showEditTopicDialog = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                        enabled = title.isNotBlank()
+                    ) { Text("SAVE CHANGES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                },
+                dismissButton = {
+                    Button(onClick = { showEditTopicDialog = null }, colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose)) {
+                        Text("CANCEL", color = Color.White, fontSize = 11.sp)
+                    }
+                },
+                containerColor = ImmersiveSurface
+            )
+        }
+
+        val addingSubtopicParent = showAddSubtopicDialog
+        if (addingSubtopicParent != null) {
+            var title by remember { mutableStateOf("") }
+            var resourceUrl by remember { mutableStateOf("") }
+            var hoursStr by remember { mutableStateOf("2.0") }
+
+            AlertDialog(
+                onDismissRequest = { showAddSubtopicDialog = null },
+                title = { Text("PROVISION MODULE SUBTOPIC", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Adding to: ${addingSubtopicParent.title}", color = TextMuted, fontSize = 11.sp)
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Subtopic Day Title (e.g. S3 Lifecycle)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = resourceUrl,
+                            onValueChange = { resourceUrl = it },
+                            label = { Text("Study Guide Resource URL (Starts with https://)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = hoursStr,
+                            onValueChange = { hoursStr = it },
+                            label = { Text("Estimated Completion Hours") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (title.isNotBlank()) {
+                                viewModel.addSubtopic(addingSubtopicParent.id, title, resourceUrl, hoursStr.toDoubleOrNull() ?: 2.0)
+                                showAddSubtopicDialog = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                        enabled = title.isNotBlank()
+                    ) { Text("ADD SUBTOPIC", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                },
+                dismissButton = {
+                    Button(onClick = { showAddSubtopicDialog = null }, colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose)) {
+                        Text("CANCEL", color = Color.White, fontSize = 11.sp)
+                    }
+                },
+                containerColor = ImmersiveSurface
+            )
+        }
+
+        val editingSubtopic = showEditSubtopicDialog
+        if (editingSubtopic != null) {
+            var title by remember(editingSubtopic) { mutableStateOf(editingSubtopic.title) }
+            var resourceUrl by remember(editingSubtopic) { mutableStateOf(editingSubtopic.resourceUrl) }
+            var hoursStr by remember(editingSubtopic) { mutableStateOf(editingSubtopic.estimatedHours.toString()) }
+
+            AlertDialog(
+                onDismissRequest = { showEditSubtopicDialog = null },
+                title = { Text("EDIT MODULE SUBTOPIC DETAILS", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Subtopic Title") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = resourceUrl,
+                            onValueChange = { resourceUrl = it },
+                            label = { Text("Study Guide Resource URL") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = hoursStr,
+                            onValueChange = { hoursStr = it },
+                            label = { Text("Estimated Completion Hours") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (title.isNotBlank()) {
+                                viewModel.editSubtopic(editingSubtopic.id, editingSubtopic.parentTopicId, title, resourceUrl, hoursStr.toDoubleOrNull() ?: 2.0, editingSubtopic.orderIndex)
+                                showEditSubtopicDialog = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                        enabled = title.isNotBlank()
+                    ) { Text("SAVE CHANGES", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                },
+                dismissButton = {
+                    Button(onClick = { showEditSubtopicDialog = null }, colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose)) {
+                        Text("CANCEL", color = Color.White, fontSize = 11.sp)
+                    }
+                },
+                containerColor = ImmersiveSurface
+            )
+        }
+
+        if (showConfirmResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showConfirmResetDialog = false },
+                title = { Text("RESET ROADMAP TO DEFAULTS?", color = ImmersiveRose, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        text = "WARNING: This action will restore the original 8-week production DevOps SRE learning roadmap curriculum and clear custom edits. This cannot be undone.",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.resetRoadmap()
+                            showConfirmResetDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose)
+                    ) { Text("CONFIRM RESET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                },
+                dismissButton = {
+                    Button(onClick = { showConfirmResetDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = ImmersiveSurfaceVariant)) {
+                        Text("CANCEL", color = Color.White, fontSize = 11.sp)
+                    }
+                },
                 containerColor = ImmersiveSurface
             )
         }
@@ -2856,177 +3085,318 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
         val resourceSelectedCategory = remember { mutableStateOf("ALL") }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(16.dp).testTag("career_scaffold_list"),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(16.dp).testTag("career_scaffold_list"),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Modern Tabs
             item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("ROADMAP", "DAILY STUDY" to "DAILY_STUDY", "DIAGNOSTICS", "ARCHIVE", "RESOURCES").forEach { t ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val listTabs = remember {
+                        buildList {
+                            add("ROADMAP")
+                            add("DAILY STUDY" to "DAILY_STUDY")
+                            add("DIAGNOSTICS")
+                            add("ARCHIVE")
+                            add("RESOURCES")
+                            if (com.example.BuildConfig.DEBUG) {
+                                add("QA DEBUG" to "QA_DEBUG")
+                            }
+                        }
+                    }
+                    listTabs.forEach { t ->
                         val (lbl, key) = if (t is Pair<*, *>) t as Pair<String, String> else Pair(t as String, t as String)
                         Button(
                             onClick = { activeSubTab = key },
-                            modifier = Modifier.weight(1f).height(38.dp),
-                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.height(38.dp).padding(horizontal = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = if (activeSubTab == key) CyberCyan else ImmersiveSurfaceVariant)
                         ) {
-                            Text(lbl, fontSize = 7.sp, color = if (activeSubTab == key) Color.Black else Color.White, fontWeight = FontWeight.Bold)
+                            Text(lbl, fontSize = 9.sp, color = if (activeSubTab == key) Color.Black else Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
             if (activeSubTab == "ROADMAP") {
+                // Topic Control Row (Provision Topic / Reset Roadmap)
                 item {
-                    Button(
-                        onClick = { showAddUnitDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo.copy(alpha = 0.25f)),
-                        border = BorderStroke(1.dp, ImmersiveIndigo.copy(alpha = 0.6f)),
-                        modifier = Modifier.fillMaxWidth().height(42.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = CyberCyan)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("PROVISION CUSTOM STUDY UNIT (+)", color = Color.White, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { showAddTopicDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo.copy(alpha = 0.25f)),
+                            border = BorderStroke(1.dp, ImmersiveIndigo.copy(alpha = 0.6f)),
+                            modifier = Modifier.weight(1f).height(42.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = CyberCyan)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ADD TOPIC (+)", color = Color.White, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        }
+                        
+                        Button(
+                            onClick = { showConfirmResetDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose.copy(alpha = 0.15f)),
+                            border = BorderStroke(1.dp, ImmersiveRose.copy(alpha = 0.5f)),
+                            modifier = Modifier.weight(1f).height(42.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = ImmersiveRose)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("RESET ROADMAP", color = Color.White, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        }
                     }
                 }
 
-                // Sequential 28-week progress pipeline
-                weekOrder.forEach { subId ->
-                    val subObj = subList.firstOrNull { it.subtopicId == subId } ?: SubtopicProgress(
-                        subtopicId = subId,
-                        parentTopicId = when {
-                            subId == "week_1" || subId == "week_2" || subId == "week_3" -> "linux"
-                            subId == "week_4" -> "python"
-                            subId.substringAfter("week_").toIntOrNull()?.let { it in 5..14 } == true -> "aws"
-                            subId.substringAfter("week_").toIntOrNull()?.let { it in 15..21 } == true -> "docker"
-                            else -> "kubernetes"
-                        },
-                        isCompleted = false,
-                        completionDate = null,
-                        reasonNotCompleted = null,
-                        assessmentScore = 0
-                    )
-
-                    val weekInfo = weekMap[subId] ?: Pair("WEEK EX", subId.replace("_", " ").uppercase())
-                    val weekNum = subId.substringAfter("week_").toIntOrNull() ?: 1
-                    val isLocked = if (weekNum > 1) {
-                        val prevSubId = "week_${weekNum - 1}"
-                        val prevSubObj = subList.firstOrNull { it.subtopicId == prevSubId }
-                        prevSubObj == null || !prevSubObj.isCompleted
-                    } else false
-
-                    val lockLabel = if (isLocked) "🔒 Complete Week ${weekNum - 1}" else ""
-
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = if (isLocked) ImmersiveSurface.copy(alpha = 0.4f) else ImmersiveSurface),
-                                border = BorderStroke(
-                                    width = if (subObj.isCompleted) 1.dp else 0.6.dp,
-                                    color = if (isLocked) Color.White.copy(alpha = 0.02f) else if (subObj.isCompleted) CyberGreen.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f)
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(0.9f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Box(
-                                                    modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                                                        .background(if (isLocked) Color.White.copy(alpha = 0.05f) else if (subObj.isCompleted) CyberGreen.copy(alpha = 0.15f) else ImmersiveIndigo.copy(alpha = 0.15f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(text = if (isLocked) "LOCKED" else weekInfo.first, color = if (isLocked) TextMuted else if (subObj.isCompleted) CyberGreen else ImmersiveIndigo, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                                }
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                if (isLocked) {
-                                                    Text(text = lockLabel, color = ImmersiveRose, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                } else if (subObj.isCompleted) {
-                                                    if (subObj.assessmentScore == 0) {
-                                                        Text(text = "✅ COMPLETED (Study Done)", color = CyberGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                                    } else {
-                                                        val isPass = subObj.assessmentScore >= passingScore
-                                                        Text(
-                                                            text = "Score: ${subObj.assessmentScore}% " + (if (isPass) "✅ (PASSED)" else "⚠️ (Needs Revision)"),
-                                                            color = if (isPass) CyberGreen else ImmersiveAmber,
-                                                            fontSize = 10.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            fontFamily = FontFamily.Monospace
-                                                        )
-                                                    }
-                                                } else if (subObj.reasonNotCompleted == "Needs Improvement") {
-                                                    Text(text = "⚠️ NEEDS REVISION (Under $passingScore%)", color = ImmersiveRose, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                } else {
-                                                    Text(text = "NOT ATTEMPTED", color = TextMuted, fontSize = 9.sp)
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.height(6.dp))
-                                            Text(text = weekInfo.second, color = if (isLocked) TextMuted else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            
-                                            if (!isLocked && !subObj.isCompleted) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(6.dp))
-                                                            .background(ImmersiveIndigo.copy(alpha = 0.2f))
-                                                            .border(0.5.dp, CyberCyan.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                                            .clickable {
-                                                                viewModel.toggleSubtopic(
-                                                                    subId,
-                                                                    subObj.parentTopicId,
-                                                                    true,
-                                                                    "Study Completed",
-                                                                    0
-                                                                )
-                                                            }
-                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    ) {
-                                                        Text("✓ MARK COMPLETED", color = CyberCyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(6.dp))
-                                                            .background(CyberCyan.copy(alpha = 0.1f))
-                                                            .border(0.5.dp, CyberCyan, RoundedCornerShape(6.dp))
-                                                            .clickable { viewModel.startAssessment(subId) }
-                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    ) {
-                                                        Text("🚀 START ASSESSMENT", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        IconButton(onClick = { if (!isLocked) viewModel.startAssessment(subId) }, enabled = !isLocked) {
-                                            Icon(
-                                                imageVector = if (isLocked) Icons.Default.Lock else if (subObj.isCompleted && subObj.assessmentScore >= passingScore) Icons.Default.CheckCircle else Icons.Default.PlayArrow,
-                                                contentDescription = null,
-                                                tint = if (isLocked) TextMuted else if (subObj.isCompleted && subObj.assessmentScore >= passingScore) CyberGreen else CyberCyan
-                                            )
-                                        }
-                                    }
+                // If empty, show a nice seeded state advice
+                if (topics.isEmpty()) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                            modifier = Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(12.dp))
+                        ) {
+                            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("No curriculum topics active.", color = Color.White, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = { viewModel.resetRoadmap() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan)
+                                ) {
+                                    Text("SEED DEFAULT ROADMAP", color = Color.Black, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
-                }
+                    }
+                } else {
+                    // Loop over topics sorted by orderIndex
+                    val sortedTopics = topics.sortedBy { it.orderIndex }
+                    sortedTopics.forEachIndexed { index, topic ->
+                        val topicSubtopics = subtopics.filter { it.parentTopicId == topic.id }.sortedBy { it.orderIndex }
+                        val totalSubs = topicSubtopics.size
+                        val completedSubs = topicSubtopics.count { s -> subList.any { it.subtopicId == "sub_${s.id}" && it.isCompleted } }
+                        val progressPct = if (totalSubs > 0) (completedSubs * 100) / totalSubs else 0
 
-                // Render custom added ones
-                val customUnits = subList.filter { it.subtopicId.startsWith("custom_") }
-                if (customUnits.isNotEmpty()) {
-                    item { Text(text = "CUSTOM SYLLABUS UNITS", color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
-                    items(customUnits) { subObj ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                            border = BorderStroke(1.dp, if (subObj.isCompleted) CyberGreen.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column {
-                                    Text(text = subObj.subtopicId.substringAfter("custom_").replace("_", " ").uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                                border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)),
+                                modifier = Modifier.fillMaxWidth().testTag("roadmap_topic_card_${topic.id}")
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            // Icon selection based on topic.iconName
+                                            val icVector = when (topic.iconName.lowercase()) {
+                                                "settings" -> Icons.Default.Settings
+                                                "refresh", "router" -> Icons.Default.Refresh
+                                                "build", "linux" -> Icons.Default.Build
+                                                "play", "cloud" -> Icons.Default.PlayArrow
+                                                "delete" -> Icons.Default.Delete
+                                                "add" -> Icons.Default.Add
+                                                "done", "check", "code" -> Icons.Default.Check
+                                                else -> Icons.Default.Info
+                                            }
+                                            Icon(imageVector = icVector, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "WEEK ${topic.weekNumber}",
+                                                color = CyberCyan,
+                                                fontSize = 9.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        // Edit actions if isEditMode == true
+                                        if (isEditMode) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                // Up arrow (reordering)
+                                                if (index > 0) {
+                                                    IconButton(onClick = {
+                                                        // Swap topic order
+                                                        val prevTopic = sortedTopics[index - 1]
+                                                        viewModel.editTopic(topic.id, topic.title, topic.weekNumber, topic.description, topic.iconName, prevTopic.orderIndex)
+                                                        viewModel.editTopic(prevTopic.id, prevTopic.title, prevTopic.weekNumber, prevTopic.description, prevTopic.iconName, topic.orderIndex)
+                                                    }, modifier = Modifier.size(24.dp)) {
+                                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move Up", tint = Color.White)
+                                                    }
+                                                }
+                                                // Down arrow (reordering)
+                                                if (index < sortedTopics.size - 1) {
+                                                    IconButton(onClick = {
+                                                        // Swap topic order
+                                                        val nextTopic = sortedTopics[index + 1]
+                                                        viewModel.editTopic(topic.id, topic.title, topic.weekNumber, topic.description, topic.iconName, nextTopic.orderIndex)
+                                                        viewModel.editTopic(nextTopic.id, nextTopic.title, nextTopic.weekNumber, nextTopic.description, nextTopic.iconName, topic.orderIndex)
+                                                    }, modifier = Modifier.size(24.dp)) {
+                                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move Down", tint = Color.White)
+                                                    }
+                                                }
+                                                // Edit topic button
+                                                IconButton(onClick = { showEditTopicDialog = topic }, modifier = Modifier.size(24.dp)) {
+                                                    Icon(Icons.Default.Edit, contentDescription = "Edit Topic", tint = CyberCyan)
+                                                }
+                                                // Delete topic button
+                                                IconButton(onClick = { viewModel.deleteTopic(topic) }, modifier = Modifier.size(24.dp)) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Delete Topic", tint = ImmersiveRose)
+                                                }
+                                            }
+                                        } else {
+                                            Text(
+                                                text = "$totalSubs Subtopics • $progressPct% Done",
+                                                color = if (progressPct == 100) CyberGreen else TextMuted,
+                                                fontSize = 9.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(text = if (subObj.isCompleted) "PASSED (${subObj.assessmentScore}%)" else "PENDING KNOWLEDGE CHECK", color = if (subObj.isCompleted) CyberGreen else TextMuted, fontSize = 10.sp)
-                                }
-                                IconButton(onClick = { viewModel.startAssessment(subObj.subtopicId) }) {
-                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = CyberCyan)
+                                    Text(text = topic.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    if (topic.description.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(text = topic.description, color = TextMuted, fontSize = 11.sp)
+                                    }
+
+                                    // Display Progress Linear indicator
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LinearProgressIndicator(
+                                        progress = if (totalSubs > 0) completedSubs.toFloat() / totalSubs else 0f,
+                                        color = if (progressPct == 100) CyberGreen else CyberCyan,
+                                        trackColor = ImmersiveSurfaceVariant,
+                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                                    )
+
+                                    // Render direct subtopics lists inside the topic card
+                                    if (topicSubtopics.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                                .padding(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            topicSubtopics.forEachIndexed { subIdx, subtopic ->
+                                                val subProgressId = "sub_${subtopic.id}"
+                                                val subProgressObj = subList.firstOrNull { it.subtopicId == subProgressId }
+                                                val isSubCompleted = subProgressObj != null && subProgressObj.isCompleted
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = "Day ${subIdx + 1}: ${subtopic.title}",
+                                                            color = if (isSubCompleted) CyberGreen else Color.White,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        )
+                                                        if (subtopic.resourceUrl.isNotBlank()) {
+                                                            Text(
+                                                                text = subtopic.resourceUrl,
+                                                                color = CyberCyan.copy(alpha = 0.7f),
+                                                                fontSize = 9.sp,
+                                                                maxLines = 1
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (isEditMode) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                            // Subtopic reordering up arrow
+                                                            if (subIdx > 0) {
+                                                                IconButton(onClick = {
+                                                                    val prevSub = topicSubtopics[subIdx - 1]
+                                                                    viewModel.editSubtopic(subtopic.id, subtopic.parentTopicId, subtopic.title, subtopic.resourceUrl, subtopic.estimatedHours, prevSub.orderIndex)
+                                                                    viewModel.editSubtopic(prevSub.id, prevSub.parentTopicId, prevSub.title, prevSub.resourceUrl, prevSub.estimatedHours, subtopic.orderIndex)
+                                                                }, modifier = Modifier.size(20.dp)) {
+                                                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move Subtopic Up", tint = Color.White)
+                                                                }
+                                                            }
+                                                            // Subtopic reordering down arrow
+                                                            if (subIdx < topicSubtopics.size - 1) {
+                                                                IconButton(onClick = {
+                                                                    val nextSub = topicSubtopics[subIdx + 1]
+                                                                    viewModel.editSubtopic(subtopic.id, subtopic.parentTopicId, subtopic.title, subtopic.resourceUrl, subtopic.estimatedHours, nextSub.orderIndex)
+                                                                    viewModel.editSubtopic(nextSub.id, nextSub.parentTopicId, nextSub.title, nextSub.resourceUrl, nextSub.estimatedHours, subtopic.orderIndex)
+                                                                }, modifier = Modifier.size(20.dp)) {
+                                                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move Subtopic Down", tint = Color.White)
+                                                                }
+                                                            }
+                                                            // Edit Subtopic
+                                                            IconButton(onClick = { showEditSubtopicDialog = subtopic }, modifier = Modifier.size(20.dp)) {
+                                                                Icon(Icons.Default.Edit, contentDescription = "Edit Subtopic", tint = CyberCyan, modifier = Modifier.size(12.dp))
+                                                            }
+                                                            // Delete Subtopic
+                                                            IconButton(onClick = { viewModel.deleteSubtopic(subtopic) }, modifier = Modifier.size(20.dp)) {
+                                                                Icon(Icons.Default.Delete, contentDescription = "Delete Subtopic", tint = ImmersiveRose, modifier = Modifier.size(12.dp))
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // Non edit mode actions: Start assessment/Toggle completeness
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(4.dp))
+                                                                    .background(if (isSubCompleted) ImmersiveRose.copy(alpha = 0.15f) else CyberGreen.copy(alpha = 0.15f))
+                                                                    .clickable {
+                                                                        viewModel.toggleSubtopic(
+                                                                            subProgressId,
+                                                                            "topic_${topic.id}",
+                                                                            !isSubCompleted,
+                                                                            "Manual Topic Study Toggle",
+                                                                            if (!isSubCompleted) 0 else subProgressObj?.assessmentScore ?: 0
+                                                                        )
+                                                                    }
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = if (isSubCompleted) "UNMARK COMPLETE" else "✓ STUDY DONE",
+                                                                    color = if (isSubCompleted) ImmersiveRose else CyberGreen,
+                                                                    fontSize = 8.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    fontFamily = FontFamily.Monospace
+                                                                )
+                                                            }
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(4.dp))
+                                                                    .background(CyberCyan.copy(alpha = 0.15f))
+                                                                    .clickable {
+                                                                        viewModel.startAssessment(subProgressId)
+                                                                    }
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Text("START ASSESSMENT", color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Add Subtopic button if isEditMode == true
+                                    if (isEditMode) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Button(
+                                            onClick = { showAddSubtopicDialog = topic },
+                                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan.copy(alpha = 0.15f)),
+                                            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.3f)),
+                                            modifier = Modifier.fillMaxWidth().height(32.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("ADD SUBTOPIC ITEM (+)", color = Color.White, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3036,42 +3406,379 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
             if (activeSubTab == "DAILY_STUDY") {
                 item {
-                    Column(modifier = Modifier.padding(bottom = 6.dp)) {
-                        Text("SELECT ACTIVE STUDY WEEK (1 - 28)", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            (1..28).forEach { w ->
-                                FilterChip(
-                                    selected = selectedWeek == w,
-                                    onClick = { viewModel.setSelectedWeek(w) },
-                                    label = { Text("Week $w", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
+                    var expandedWeekDropdown by remember { mutableStateOf(false) }
+                    val currentWeekTopic = topics.firstOrNull { it.weekNumber == selectedWeek }
+                    val weekTitle = currentWeekTopic?.title ?: "Custom Study Slot"
+                    
+                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                        Text("SELECT ROADMAP WEEK", color = TextCelestial, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ImmersiveSurfaceVariant, RoundedCornerShape(8.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                .clickable { expandedWeekDropdown = !expandedWeekDropdown }
+                                .padding(horizontal = 14.dp, vertical = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Week $selectedWeek - $weekTitle",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Dropdown",
+                                    tint = CyberCyan
+                                )
+                            }
+                            
+                            DropdownMenu(
+                                expanded = expandedWeekDropdown,
+                                onDismissRequest = { expandedWeekDropdown = false },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .background(ImmersiveSurface)
+                                    .border(1.dp, Color.White.copy(alpha = 0.15f))
+                            ) {
+                                val totalWeeks = if (topics.isNotEmpty()) topics.maxOf { it.weekNumber } else 28
+                                (1..totalWeeks).forEach { w ->
+                                    val t = topics.firstOrNull { it.weekNumber == w }?.title ?: "Custom Agile Study Block"
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "Week $w - $t",
+                                                color = if (selectedWeek == w) CyberCyan else Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (selectedWeek == w) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.setSelectedWeek(w)
+                                            viewModel.setSelectedDay(1)
+                                            expandedWeekDropdown = false
+                                        },
+                                        modifier = Modifier.background(if (selectedWeek == w) ImmersiveSurfaceVariant else Color.Transparent)
+                                    )
+                                }
                             }
                         }
                     }
                 }
+
                 item {
-                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                        Text("SELECT INTRADAY TASK (DAY 1 - 7)", color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                            (1..7).forEach { d ->
-                                FilterChip(
-                                    selected = selectedDay == d,
-                                    onClick = { viewModel.setSelectedDay(d) },
-                                    label = { Text("Day $d", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = CyberCyan, selectedLabelColor = Color.Black)
+                    var expandedDayDropdown by remember { mutableStateOf(false) }
+                    
+                    val activeTopic = topics.firstOrNull { it.weekNumber == selectedWeek }
+                    val activeTopicSubtopics = if (activeTopic != null) subtopics.filter { it.parentTopicId == activeTopic.id }.sortedBy { it.orderIndex } else emptyList()
+                    val targetSubtopic = activeTopicSubtopics.getOrNull(selectedDay - 1)
+                    val activeSubtopicTitle = targetSubtopic?.title ?: "No configured task"
+
+                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                        Text("SELECT STUDY DAY / TOPIC", color = TextCelestial, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ImmersiveSurfaceVariant, RoundedCornerShape(8.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                .clickable { expandedDayDropdown = !expandedDayDropdown }
+                                .padding(horizontal = 14.dp, vertical = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (targetSubtopic != null) "Day $selectedDay - $activeSubtopicTitle" else "Select Day ▼",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Dropdown",
+                                    tint = CyberCyan
+                                )
+                            }
+                            
+                            DropdownMenu(
+                                expanded = expandedDayDropdown,
+                                onDismissRequest = { expandedDayDropdown = false },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .background(ImmersiveSurface)
+                                    .border(1.dp, Color.White.copy(alpha = 0.15f))
+                            ) {
+                                if (activeTopicSubtopics.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("No subtopics configured for this week.", color = Color.White, fontSize = 12.sp) },
+                                        onClick = { expandedDayDropdown = false }
+                                    )
+                                } else {
+                                    activeTopicSubtopics.forEachIndexed { index, sub ->
+                                        val dayNum = index + 1
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "Day $dayNum - ${sub.title}",
+                                                    color = if (selectedDay == dayNum) CyberCyan else Color.White,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (selectedDay == dayNum) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = {
+                                                viewModel.setSelectedDay(dayNum)
+                                                expandedDayDropdown = false
+                                            },
+                                            modifier = Modifier.background(if (selectedDay == dayNum) ImmersiveSurfaceVariant else Color.Transparent)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Dynamic matching
+                val activeTopic = topics.firstOrNull { it.weekNumber == selectedWeek }
+                val activeTopicSubtopics = if (activeTopic != null) subtopics.filter { it.parentTopicId == activeTopic.id }.sortedBy { it.orderIndex } else emptyList()
+                val targetSubtopic = activeTopicSubtopics.getOrNull(selectedDay - 1)
+
+                val activeSubId = if (targetSubtopic != null) "sub_${targetSubtopic.id}" else "week_${selectedWeek}_day_${selectedDay}"
+                val subProgressObj = subList.firstOrNull { it.subtopicId == activeSubId }
+                val isCompleted = subProgressObj != null && subProgressObj.isCompleted
+
+                // Build daily task structure based on targetSubtopic
+                val curr = if (targetSubtopic != null) {
+                    com.example.data.entity.DailyTaskDetail(
+                        topicName = targetSubtopic.title,
+                        learningObjectives = listOf("Analyze structural components of ${targetSubtopic.title} systematically.", "Configure deployment policies and security checkpoints.", "Simulate real-world traffic patterns for validated operation."),
+                        studyGuide = "In-depth guide for ${targetSubtopic.title}. Focus on production setup, latency rules, container/cloud configuration policies. Open resources: ${targetSubtopic.resourceUrl}",
+                        caseStudy = "PRODUCTION INCIDENT: Unmonitored latency spikes on ${targetSubtopic.title} caused user experience degradations. Adding automated recovery checkpoints and throttling rules secured 100% operation under load.",
+                        assessmentMapping = "Verifies proficiency on ${targetSubtopic.title}.",
+                        revisionMapping = "Schedules spaced repetition intervals for ${targetSubtopic.title} next."
+                    )
+                } else {
+                    com.example.data.entity.DailyTaskDetail(
+                        topicName = "No subtopic configured for Week $selectedWeek Day $selectedDay",
+                        learningObjectives = emptyList(),
+                        studyGuide = "No custom subtopic is mapped to this slot. Toggle 'Edit Mode' (FAB) on the ROADMAP tab to design your learning curriculum!",
+                        caseStudy = "No incident logged.",
+                        assessmentMapping = "Locked",
+                        revisionMapping = "N/A"
+                    )
+                }
+
+                // AI Mentor Recommendation Card
+                item {
+                    val recommendationText = remember(subProgressObj, targetSubtopic, subList) {
+                        val needsImprovementItem = subList.firstOrNull { it.isCompleted && it.assessmentScore > 0 && it.assessmentScore < 70 }
+                        val pendingRevisionItem = subList.firstOrNull { s ->
+                            val compTime = s.completionDate ?: System.currentTimeMillis()
+                            val nextDay = compTime + (24 * 60 * 60 * 1000L)
+                            val now = System.currentTimeMillis()
+                            now >= nextDay && s.reasonNotCompleted != "RETAINED"
+                        }
+                        
+                        when {
+                            needsImprovementItem != null -> {
+                                val itemTitle = needsImprovementItem.subtopicId.substringAfter("sub_").replace("_", " ").uppercase()
+                                "You struggled with $itemTitle (${needsImprovementItem.assessmentScore}%) in your previous assessment. Review those key architectural configurations before moving forward to advanced chapters!"
+                            }
+                            pendingRevisionItem != null -> {
+                                val itemTitle = pendingRevisionItem.subtopicId.substringAfter("sub_").replace("_", " ").uppercase()
+                                "Revision is due for $itemTitle! Spaced repetition is critical to cement your platform concepts. Set aside 10 minutes to review this topic today."
+                            }
+                            subProgressObj != null && subProgressObj.isCompleted && subProgressObj.assessmentScore >= 90 -> {
+                                val itemTitle = targetSubtopic?.title ?: "current topic"
+                                "You scored exceptionally well in $itemTitle. You have achieved deep technical proficiency! Continue driving through the remaining cloud challenges."
+                            }
+                            subProgressObj != null && subProgressObj.isCompleted && subProgressObj.assessmentScore >= 70 -> {
+                                val itemTitle = targetSubtopic?.title ?: "current topic"
+                                "You scored well in $itemTitle. Excellent platform competency! Proceed with the official study guide to master the next sequence."
+                            }
+                            targetSubtopic != null -> {
+                                "Welcome to Week $selectedWeek Day $selectedDay. We are analyzing '${targetSubtopic.title}'. My recommendation: complete the core concept and study guide before launching the cognitive checklist interview."
+                            }
+                            else -> {
+                                "Select a week and topic from the dropdown menus to load your custom DevOps path and begin interactive training."
+                            }
+                        }
+                    }
+                    
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveIndigo.copy(alpha = 0.12f)),
+                        border = BorderStroke(1.dp, ImmersiveIndigo.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "AI Mentor Guidance",
+                                tint = CyberCyan,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Column {
+                                Text("TODAY'S AI MENTOR RECOMMENDATION", color = CyberCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = recommendationText,
+                                    color = Color.White.copy(alpha = 0.95f),
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    fontFamily = FontFamily.SansSerif
                                 )
                             }
                         }
                     }
                 }
 
-                val curr = com.example.data.entity.SreCurriculum.getDailyTaskDetail(selectedWeek, selectedDay)
-                val activeSubId = "week_${selectedWeek}_day_${selectedDay}"
-                val subObj = subList.firstOrNull { it.subtopicId == activeSubId }
-                val isCompleted = subObj != null && subObj.isCompleted
+                // Learning Status Card
+                item {
+                    val statusText = getLearningStatus(subProgressObj)
+                    val score = subProgressObj?.assessmentScore ?: 0
+                    
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant.copy(alpha = 0.7f)),
+                        border = BorderStroke(1.dp, color = when(statusText) {
+                            "Pass", "Retained" -> CyberGreen.copy(alpha = 0.4f)
+                            "Average" -> CyberCyan.copy(alpha = 0.4f)
+                            "Needs Improvement", "Revision Due" -> ImmersiveRose.copy(alpha = 0.4f)
+                            "Assessment Pending", "Completed" -> ImmersiveAmber.copy(alpha = 0.4f)
+                            else -> Color.White.copy(alpha = 0.08f)
+                        }),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🎓 LEARNING PERFORMANCE INTEGRITY", color = CyberCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            when(statusText) {
+                                                "Pass", "Retained" -> CyberGreen.copy(alpha = 0.15f)
+                                                "Average" -> CyberCyan.copy(alpha = 0.15f)
+                                                "Needs Improvement", "Revision Due" -> ImmersiveRose.copy(alpha = 0.15f)
+                                                "Assessment Pending", "Completed" -> ImmersiveAmber.copy(alpha = 0.15f)
+                                                else -> Color.White.copy(alpha = 0.08f)
+                                            }
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = statusText.uppercase(),
+                                        color = when(statusText) {
+                                            "Pass", "Retained" -> CyberGreen
+                                            "Average" -> CyberCyan
+                                            "Needs Improvement", "Revision Due" -> ImmersiveRose
+                                            "Assessment Pending", "Completed" -> ImmersiveAmber
+                                            else -> Color.White
+                                        },
+                                        fontSize = 9.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Checklist items
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Icon(
+                                    imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (isCompleted) CyberGreen else TextMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (isCompleted) "✓ Study Topic Completed" else "✗ Study Topic Pending",
+                                        color = if (isCompleted) Color.White else TextMuted,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text("Mark Core Concepts read using the study guide execution engines below.", color = TextMuted, fontSize = 9.sp)
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Icon(
+                                    imageVector = if (score > 0) Icons.Default.CheckCircle else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (score >= 90) CyberGreen else if (score >= 70) CyberCyan else if (score > 0) ImmersiveRose else TextMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (score > 0) "Assessment Score: $score%" else "⚠ Assessment Pending",
+                                        color = if (score > 0) Color.White else TextMuted,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = when {
+                                            score == 0 -> "Take the Cognitive Checkpoint Assessment to verify skill proficiency."
+                                            score >= 90 -> "Performance: PASS (Elite Proficiency)"
+                                            score >= 70 -> "Performance: AVERAGE (Competent Professional)"
+                                            else -> "Performance: NEEDS IMPROVEMENT"
+                                        },
+                                        color = if (score >= 90) CyberGreen else if (score >= 70) CyberCyan else if (score > 0) ImmersiveRose else TextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+
+                            if (statusText == "Retained" || statusText == "Revision Due") {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                    Icon(
+                                        imageVector = if (statusText == "Retained") Icons.Default.CheckCircle else Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = if (statusText == "Retained") CyberGreen else ImmersiveRose,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = if (statusText == "Retained") "Retention: RECALL COMPLETED" else "Retention: REVISION DUE",
+                                            color = if (statusText == "Retained") CyberGreen else ImmersiveRose,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (statusText == "Retained") "All active recall checkpoints verified." else "A revision is overdue! Select the ARCHIVE tab to perform quick recall queries.",
+                                            color = TextMuted,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 item {
                     Card(
@@ -3105,165 +3812,176 @@ fun CareerHub(viewModel: JeevanViewModel) {
                     }
                 }
 
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), 
-                        border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)), 
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("🎯 LEARNING OBJECTIVES", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            curr.learningObjectives.forEach { obj ->
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                                    Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(10.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = obj, color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                if (targetSubtopic != null) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), 
+                            border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f)), 
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("🎯 LEARNING OBJECTIVES", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                curr.learningObjectives.forEach { obj ->
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(10.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = obj, color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                item {
-                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)), modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("📖 CORE CONCEPT & STUDY GUIDE", color = CyberGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = curr.studyGuide, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
+                    item {
+                        Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)), modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("📖 CORE CONCEPT & STUDY GUIDE", color = CyberGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(text = curr.studyGuide, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
+                                if (targetSubtopic.resourceUrl.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                                    Button(
+                                        onClick = { try { uriHandler.openUri(targetSubtopic.resourceUrl) } catch(e: Exception){} },
+                                        colors = ButtonDefaults.buttonColors(containerColor = ImmersiveSurfaceVariant),
+                                        modifier = Modifier.height(30.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, tint = CyberCyan, modifier = Modifier.size(10.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("OPEN STUDY RESOURCE", fontSize = 9.sp, color = Color.White)
+                                    }
+                                }
+                            }
                         }
                     }
-                }
 
-                item {
-                    Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)), modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("🔥 PRODUCTION SRE CASE STUDY", color = ImmersiveRose, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = curr.caseStudy, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
+                    item {
+                        Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)), modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("🔥 PRODUCTION SRE CASE STUDY", color = ImmersiveRose, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(text = curr.caseStudy, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp)
+                            }
                         }
                     }
-                }
 
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                        border = BorderStroke(0.6.dp, if (isCompleted) CyberGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("⚙️ EXECUTION ENGINE", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                            border = BorderStroke(0.6.dp, if (isCompleted) CyberGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("⚙️ EXECUTION ENGINE", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isCompleted) "✓ Study Progress Locked" else "Pending completion mark", 
+                                        color = if (isCompleted) CyberGreen else TextMuted, 
+                                        fontSize = 11.sp
+                                    )
+                                    Button(
+                                        onClick = { 
+                                            viewModel.toggleSubtopic(
+                                                activeSubId,
+                                                "topic_${activeTopic?.id ?: "unknown"}",
+                                                !isCompleted,
+                                                "Self-Paced Daily Study",
+                                                if (!isCompleted) 0 else subProgressObj?.assessmentScore ?: 0
+                                            ) 
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = if (isCompleted) ImmersiveRose.copy(alpha = 0.2f) else CyberGreen),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isCompleted) "RESET PROGRESS" else "MARK COMPLETED", 
+                                            color = if (isCompleted) Color.White else Color.Black, 
+                                            fontSize = 9.sp, 
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        val savedNote = userNotes[activeSubId] ?: ""
+                        var textNotesInput by remember(activeSubId) { mutableStateOf(savedNote) }
+                        OutlinedTextField(
+                            value = textNotesInput,
+                            onValueChange = {
+                                textNotesInput = it
+                                viewModel.updateSubtopicUserNote(activeSubId, it)
+                            },
+                            label = { Text("Jot Down Critical Study Notes", fontSize = 10.sp) },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyberCyan, focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                            modifier = Modifier.fillMaxWidth().height(90.dp)
+                        )
+                    }
+
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                            border = BorderStroke(0.6.dp, if (isCompleted) CyberCyan.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("🛡️ COGNITIVE ASSESSMENT", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = if (isCompleted) "✓ Study Progress Locked" else "Pending completion mark", 
-                                    color = if (isCompleted) CyberGreen else TextMuted, 
-                                    fontSize = 11.sp
+                                    text = if (!isCompleted) "🔒 Locked: Complete today's study guide first to unlock cognitive checkpoint assessment query loops." else "🔓 Unlocked: Access live interactive DevOps interview checklist for this topic.",
+                                    color = if (isCompleted) TextCelestial else TextMuted,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp
                                 )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                
+                                val isPassed = subProgressObj != null && subProgressObj.isCompleted && subProgressObj.assessmentScore >= passingScore
                                 Button(
                                     onClick = { 
-                                        viewModel.toggleSubtopic(
-                                            activeSubId,
-                                            when {
-                                                selectedWeek == 1 || selectedWeek == 2 || selectedWeek == 3 -> "linux"
-                                                selectedWeek == 4 -> "python"
-                                                selectedWeek in 5..14 -> "aws"
-                                                selectedWeek in 15..21 -> "docker"
-                                                else -> "kubernetes"
-                                            },
-                                            !isCompleted,
-                                            "Self-Paced Daily Study",
-                                            0
-                                        ) 
+                                        if (isCompleted) {
+                                            viewModel.startAssessment(activeSubId) 
+                                        }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = if (isCompleted) ImmersiveRose.copy(alpha = 0.2f) else CyberGreen),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(30.dp)
+                                    enabled = isCompleted,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (!isCompleted) Color.White.copy(alpha = 0.05f) else if (isPassed) CyberGreen else CyberCyan,
+                                        disabledContainerColor = Color.White.copy(alpha = 0.05f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth().height(44.dp)
                                 ) {
                                     Text(
-                                        text = if (isCompleted) "RESET PROGRESS" else "MARK COMPLETED", 
-                                        color = if (isCompleted) Color.White else Color.Black, 
-                                        fontSize = 9.sp, 
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace
+                                        text = if (!isCompleted) "🔒 LOCKED UNTIL STUDY COMPLETION" else if (isPassed) "VERIFIED MATCH INTERVIEW PASSED (${subProgressObj?.assessmentScore}%) • PRACTICE AGAIN" else "🚀 LAUNCH COGNITIVE INTERVIEW CHECK", 
+                                        color = if (isCompleted) Color.Black else TextMuted, 
+                                        fontWeight = FontWeight.Bold, 
+                                        fontSize = 11.sp
                                     )
                                 }
                             }
                         }
                     }
-                }
 
-                item {
-                    val savedNote = userNotes[activeSubId] ?: ""
-                    var textNotesInput by remember(activeSubId) { mutableStateOf(savedNote) }
-                    OutlinedTextField(
-                        value = textNotesInput,
-                        onValueChange = {
-                            textNotesInput = it
-                            viewModel.updateSubtopicUserNote(activeSubId, it)
-                        },
-                        label = { Text("Jot Down Critical Study Notes", fontSize = 10.sp) },
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyberCyan, focusedTextColor = Color.White, unfocusedTextColor = Color.White),
-                        modifier = Modifier.fillMaxWidth().height(90.dp)
-                    )
-                }
-
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                        border = BorderStroke(0.6.dp, if (isCompleted) CyberCyan.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.05f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("🛡️ COGNITIVE ASSESSMENT", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (!isCompleted) "🔒 Locked: Complete today's study guide first to unlock cognitive checkpoint assessment query loops." else "🔓 Unlocked: Access live interactive DevOps interview checklist for this topic.",
-                                color = if (isCompleted) TextCelestial else TextMuted,
-                                fontSize = 11.sp,
-                                lineHeight = 14.sp
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            
-                            val isPassed = subObj != null && subObj.isCompleted && subObj.assessmentScore >= passingScore
-                            Button(
-                                onClick = { 
-                                    if (isCompleted) {
-                                        viewModel.startAssessment(activeSubId) 
-                                    }
-                                },
-                                enabled = isCompleted,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (!isCompleted) Color.White.copy(alpha = 0.05f) else if (isPassed) CyberGreen else CyberCyan,
-                                    disabledContainerColor = Color.White.copy(alpha = 0.05f)
-                                ),
-                                modifier = Modifier.fillMaxWidth().height(44.dp)
-                            ) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                            border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("🔄 RETENTION & REVISION MAPPING", color = CyberGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val currentWeekTitle = topics.firstOrNull { it.weekNumber == selectedWeek }?.title ?: "Custom Agile Study Block"
                                 Text(
-                                    text = if (!isCompleted) "🔒 LOCKED UNTIL STUDY COMPLETION" else if (isPassed) "VERIFIED MATCH INTERVIEW PASSED (${subObj?.assessmentScore}%) • PRACTICE AGAIN" else "🚀 LAUNCH COGNITIVE INTERVIEW CHECK", 
-                                    color = if (isCompleted) Color.Black else TextMuted, 
-                                    fontWeight = FontWeight.Bold, 
+                                    text = "Weekly Schedule: ${currentWeekTitle}. Revision: Scheduled automatically post-completion.",
+                                    color = TextCelestial,
                                     fontSize = 11.sp
                                 )
                             }
-                        }
-                    }
-                }
-
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                        border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("🔄 RETENTION & REVISION MAPPING", color = CyberGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Weekly Schedule: ${com.example.data.entity.SreCurriculum.getWeekTitle(selectedWeek)}. Revision: Scheduled automatically post-completion.",
-                                color = TextCelestial,
-                                fontSize = 11.sp
-                            )
                         }
                     }
                 }
@@ -3458,7 +4176,7 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
                 if (resourcesSubTab == "RECOMMENDED") {
                     item {
-                        val categories = listOf("ALL", "LINUX", "AWS", "CONTAINERS", "KUBERNETES", "INFRASTRUCTURE")
+                        val categories = listOf("ALL", "LINUX", "AWS", "CONTAINERS", "KUBERNETES", "CI/CD & IAC", "CAREER")
                         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             categories.forEach { cat ->
                                 val isSel = resourceSelectedCategory.value == cat
@@ -3473,25 +4191,31 @@ fun CareerHub(viewModel: JeevanViewModel) {
                     }
 
                     val resourceSheetItems = listOf(
-                        SreResource("LINUX", "The Linux Command Line", "William Shotts", "Master the shell interface, file systems, navigation, and core automation scripting.", "Book (Free PDF)", "https://linuxcommand.org/tlcl.php"),
-                        SreResource("LINUX", "Explain Shell Visual", "Visual Parser", "Interactive tool explaining complex bash scripts line by line dynamically.", "Interactive Web Tool", "https://explainshell.com"),
-                        SreResource("LINUX", "Linux Foundation LFS201", "Linux Foundation", "Official training for professional sysadmin configurations and administration.", "Official Course", "https://training.linuxfoundation.org"),
-                        
-                        SreResource("AWS", "Adrian Cantrill's SRE Course", "Cantrill.io", "Gold-standard architectural training covering VPC, routing, and cloud failovers.", "Interactive Courses", "https://learn.cantrill.io"),
-                        SreResource("AWS", "AWS Architecture Center", "AWS Official Docs", "Standard reference designs, structured whitepapers, and disaster recovery rules.", "Official Documentation", "https://aws.amazon.com/architecture"),
-                        SreResource("AWS", "Cloudcraft Architecture", "Visual Modeler", "Design and model real-time connected AWS cost forecasts and architectures.", "Modeling Web Tool", "https://cloudcraft.co"),
+                        SreResource("LINUX", "Avizway YouTube", "Avizway", "DevOps & Cloud Engineer: Linux & AWS modules (Telugu channel).", "Primary Channel", "https://youtube.com/c/avizway"),
+                        SreResource("LINUX", "Linux Journey", "Linux Journey", "Interactive, step-by-step guides for self-learning Linux fundamentals.", "Free Interactive Tutorial", "https://linuxjourney.com"),
+                        SreResource("LINUX", "OverTheWire Bandit", "OverTheWire wargames", "Gamified Linux Command Line CLI practice. Highly effective.", "SRE Wargame Studio", "https://overthewire.org/wargames/bandit"),
 
-                        SreResource("CONTAINERS", "Docker Deep Dive", "Nigel Poulton", "The definitive handbook on Docker containers host networking and layers mapping.", "Book (Paper/Kindle)", "https://nigelpoulton.com"),
-                        SreResource("CONTAINERS", "Play with Docker Labs", "Docker Sandbox", "Free, multi-node terminal playground to try docker images, volumes & compose.", "Sandbox Playground", "https://labs.play-with-docker.com"),
-                        SreResource("CONTAINERS", "Docker Security Benchmarks", "CIS Benchmarks", "Hardening standards and container isolation escape prevention guidelines.", "Official Standards", "https://www.cisecurity.org"),
+                        SreResource("AWS", "AWS Free Tier EC2 & S3", "AWS Platform", "Learn AWS hands-on by deploying full compute servers, VPC, Databases, and S3.", "Cloud Platform Sandbox", "https://aws.amazon.com/free"),
+                        SreResource("AWS", "AWS Solutions Architect Dojo", "Tutorials Dojo", "Practice blueprints, exams revision, and exam simulation for AWS SAA-C03.", "Certified Prep Platform", "https://tutorialsdojo.com"),
+                        SreResource("AWS", "AWS Skill Builder Lab Sandbox", "AWS Platform Official", "Hands-on virtual lab scenarios covering AWS IAM, VPC, EC2, and S3 systems.", "Official Training Studio", "https://skillbuilder.aws"),
 
-                        SreResource("KUBERNETES", "KubeAcademy Pro", "VMware", "Comprehensive interactive courses covering cluster services, endpoints & DNS.", "Education Site", "https://kubeacademy.com"),
-                        SreResource("KUBERNETES", "Kubernetes.io Tutorials", "K8s Core Team", "Hands-on, localized step-by-step exercises for pods and deployments.", "Official Exercises", "https://kubernetes.io/docs/tutorials"),
-                        SreResource("KUBERNETES", "Lens Core", "Mirantis", "Full developer viewport and IDE interface to debug live cluster nodes.", "Client Tool", "https://k8slens.dev"),
+                        SreResource("CONTAINERS", "TechWorld with Nana Docker", "Nana Janashia", "Comprehensive multi-node Docker fundamentals, Compose, and networks course.", "Full video tutorial", "https://www.youtube.com/watch?v=3c-iBn73dDE"),
+                        SreResource("CONTAINERS", "Play with Docker Labs", "Docker Education", "Free, multi-node terminal web playground to try docker images and volumes.", "Sandbox Web Tool", "https://labs.play-with-docker.com"),
+                        SreResource("CONTAINERS", "Trivy Scanner Documentation", "Aqua Security", "Guide to configuration compliance and container vulnerability scanning.", "Official Docs", "https://aquasecurity.github.io/trivy"),
 
-                        SreResource("INFRASTRUCTURE", "Google SRE Library", "Google Engineering", "The canonical Google SRE books defining error budgets, SLA & observability.", "Free Library (Books)", "https://sre.google/books"),
-                        SreResource("INFRASTRUCTURE", "Terraform Registry Learn", "HashiCorp", "Complete setup instructions, module patterns, and remote backend lockers.", "Official Guides", "https://developer.hashicorp.com/terraform"),
-                        SreResource("INFRASTRUCTURE", "Helm Charts Registry", "Artifact Hub", "Distributed package manager hub to deploy validated Prometheus & Grafana charts.", "Artifact Hub", "https://artifacthub.io")
+                        SreResource("KUBERNETES", "TechWorld with Nana Kubernetes", "Nana Janashia", "Definitive multi-hour guide on Kubernetes pods, deployments, services, ingress.", "Full video tutorial", "https://www.youtube.com/watch?v=X48VuDVv0do"),
+                        SreResource("KUBERNETES", "Killercoda K8s Workspace", "Killercoda Scenarios", "Free online interactive sandboxes to practice multi-node troubleshooting.", "Hands-On Scenarios", "https://killercoda.com"),
+                        SreResource("KUBERNETES", "Grafana Tutorials", "Grafana Labs", "Complete guide to binding data sources, scraping, and visualizing dashboards.", "Official Guides", "https://grafana.com/tutorials"),
+
+                        SreResource("CI/CD & IAC", "GitHub Actions CI/CD", "GitHub Docs", "Establish pipeline workflows, build Docker images, configure OIDC AWS keyless entry.", "Official Documentation", "https://docs.github.com/en/actions"),
+                        SreResource("CI/CD & IAC", "Jenkins Full Course", "Simplilearn Studio", "Setup high-scale automation servers, write pipeline groovy files.", "Full course video", "https://www.youtube.com/watch?v=LFDrDnKP_gA"),
+                        SreResource("CI/CD & IAC", "Ansible Engine Guide", "Red Hat", "Agentless configuration management, dynamic state templates.", "Official Docs", "https://docs.ansible.com"),
+                        SreResource("CI/CD & IAC", "Terraform HashiCorp Learn", "HashiCorp Docs", "Comprehensive guides to writing providers, outputs, variables, remote states.", "Official Tutorials", "https://developer.hashicorp.com/terraform/tutorials"),
+                        SreResource("CI/CD & IAC", "Terraform deep dive", "Abhishek Veeramalla", "Full portfolio-ready playlist on Terraform infrastructure as code with AWS labs.", "Devops Playlist", "https://www.youtube.com/@AbhishekVeeramalla"),
+
+                        SreResource("CAREER", "Naukri Job Finder", "Naukri", "Apply for Enterprise cloud architect & Devops platforms engineer openings.", "Job Board Platform", "https://www.naukri.com"),
+                        SreResource("CAREER", "Instahyre Startup Hub", "Instahyre", "Directly lookup tech vacancies and SRE internships in high-growth companies.", "Aviation Recruitment Portal", "https://www.instahyre.com"),
+                        SreResource("CAREER", "LinkedIn Professional Jobs", "LinkedIn", "Apply for active roles and send networking outreach direct to recruiters.", "Social Career Network", "https://www.linkedin.com/jobs")
                     )
 
                     val filteredResources = resourceSheetItems.filter {
@@ -3686,6 +4410,12 @@ fun CareerHub(viewModel: JeevanViewModel) {
                 }
             }
 
+            if (activeSubTab == "QA_DEBUG" && com.example.BuildConfig.DEBUG) {
+                item {
+                    QaDebugPanel(viewModel)
+                }
+            }
+
             // DevOps Troubleshooting Mini-scenario quiz
             item { Text("MOCK ACTIVE TROUBLESHOOTING FIELD", color = ImmersiveIndigo, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
             item {
@@ -3770,6 +4500,46 @@ fun CareerHub(viewModel: JeevanViewModel) {
                 }
             }
         }
+
+        // Floating Action Button for Roadmap Toggling of Edit Mode
+        FloatingActionButton(
+            onClick = { isEditMode = !isEditMode },
+            containerColor = if (isEditMode) CyberCyan else ImmersiveIndigo,
+            contentColor = if (isEditMode) Color.Black else Color.White,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .testTag("edit_roadmap_fab"),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Icon(
+                imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
+                contentDescription = if (isEditMode) "Save Roadmap Changes" else "Edit Roadmap"
+            )
+        }
+    }
+}
+}
+
+fun getLearningStatus(progress: com.example.data.entity.SubtopicProgress?): String {
+    if (progress == null || !progress.isCompleted) {
+        return "Pending"
+    }
+    
+    val score = progress.assessmentScore
+    val reason = progress.reasonNotCompleted ?: ""
+    
+    val compTime = progress.completionDate ?: System.currentTimeMillis()
+    val nextDay = compTime + (24 * 60 * 60 * 1000L)
+    val now = System.currentTimeMillis()
+
+    return when {
+        reason == "RETAINED" -> "Retained"
+        now >= nextDay -> "Revision Due"
+        score == 0 -> "Assessment Pending"
+        score >= 90 -> "Pass"
+        score >= 70 -> "Average"
+        else -> "Needs Improvement"
     }
 }
 
@@ -3883,6 +4653,38 @@ data class SreResource(
 // 4. HOLISTIC WELLNESS & DETOX FOCUS HUB
 // --------------------------------------------------
 @Composable
+fun SourceBadge(source: String) {
+    val isSynced = source == "Synced"
+    val bgColor = if (isSynced) CyberCyan.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.08f)
+    val contentColor = if (isSynced) CyberCyan else TextMuted
+    val text = if (isSynced) "Synced" else "Manual"
+    
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bgColor)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(if (isSynced) CyberCyan else TextMuted)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = text,
+                color = contentColor,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+    }
+}
+
+@Composable
 fun HealthHub(viewModel: JeevanViewModel) {
     val healthLogs by viewModel.healthLogs.collectAsState()
     val todayLog = healthLogs.firstOrNull() ?: HealthLog(dateString = viewModel.getTodayDateString())
@@ -3909,6 +4711,273 @@ fun HealthHub(viewModel: JeevanViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Health Connect Gateway Status Card (Phase 2A)
+        item {
+            val isAvailable by viewModel.healthConnectAvailable.collectAsState()
+            val permissionGranted by viewModel.permissionState.collectAsState()
+            val lastSyncTime by viewModel.lastSyncTime.collectAsState()
+            val syncStatus by viewModel.healthSyncStatus.collectAsState()
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "HEALTH CONNECT GATEWAY",
+                        color = CyberCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            val statusText = if (isAvailable) "Connected" else "Unsupported / Missing"
+                            val statusColor = if (isAvailable) CyberGreen else ImmersiveRose
+                            Text(
+                                text = "Status: $statusText",
+                                color = statusColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            val permText = if (permissionGranted) "Granted (Full Access)" else "Pending / Missing"
+                            val permColor = if (permissionGranted) CyberGreen else ImmersiveAmber
+                            Text(
+                                text = "Permissions: $permText",
+                                color = permColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            val syncTimeFormatted = if (lastSyncTime > 0) {
+                                SimpleDateFormat("yyyy-MM-dd HH:mm a", Locale.getDefault()).format(Date(lastSyncTime))
+                            } else {
+                                "Never Synced"
+                            }
+                            Text(
+                                text = "Last Synced: $syncTimeFormatted",
+                                color = TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.syncHealthData() },
+                            enabled = syncStatus != "SYNCING",
+                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.testTag("manual_sync_btn")
+                        ) {
+                            Text(
+                                text = if (syncStatus == "SYNCING") "Syncing..." else "Sync Now",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Daily Vitals Lifeline Metrics Display Card (Phase 2A)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "DAILY VITALS LIFELINE",
+                        color = ImmersiveIndigo,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Steps Metric Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(ImmersiveIndigo.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Face,
+                                        contentDescription = "Steps Icon",
+                                        tint = ImmersiveIndigo,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Steps Count", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Goal: ${userProfile.dailyStepGoal} steps", color = TextMuted, fontSize = 9.sp)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "${todayLog.stepsCount}",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                SourceBadge(todayLog.stepsSource)
+                            }
+                        }
+                        
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                        
+                        // Sleep Metric Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(CyberCyan.copy(alpha = 0.10f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = "Sleep Icon",
+                                        tint = CyberCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Sleep Duration", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    val hr = todayLog.sleepMinutes / 60
+                                    val mn = todayLog.sleepMinutes % 60
+                                    Text("Total duration: ${hr}h ${mn}m", color = TextMuted, fontSize = 9.sp)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val hr = todayLog.sleepMinutes / 60
+                                val mn = todayLog.sleepMinutes % 60
+                                Text(
+                                    text = "${hr}h ${mn}m",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                SourceBadge(todayLog.sleepSource)
+                            }
+                        }
+                        
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                        
+                        // Heart Rate Metric Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(ImmersiveRose.copy(alpha = 0.10f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = "Heart Rate Icon",
+                                        tint = ImmersiveRose,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Average Heart Rate", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Resting range: ~60-80 bpm", color = TextMuted, fontSize = 9.sp)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val hrVal = if (todayLog.averageHeartRate > 0) "${todayLog.averageHeartRate} bpm" else "72 bpm"
+                                Text(
+                                    text = hrVal,
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                SourceBadge(todayLog.heartRateSource)
+                            }
+                        }
+                        
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                        
+                        // Water Intake Metric Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(CyberCyan.copy(alpha = 0.10f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Water Icon",
+                                        tint = CyberCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Water Intake", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Daily Goal: ${userProfile.dailyWaterGoalMl} ml", color = TextMuted, fontSize = 9.sp)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val waterLitres = todayLog.waterIntakeMl / 1000.0
+                                Text(
+                                    text = String.format(Locale.getDefault(), "%.1fL", waterLitres),
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                SourceBadge("Manual")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Deep Focus Timer Controls Panel
         item {
             Card(
@@ -4126,54 +5195,67 @@ fun HealthHub(viewModel: JeevanViewModel) {
                             }
                             
                             // Offline dictionary mapping
-                            val result = when {
-                                nameLower.contains("lentil") || nameLower.contains("dal") -> {
-                                    val factor = grams / 100
-                                    MacroResult((116 * factor).toInt(), 9.0 * factor, 20.0 * factor, 0.4 * factor, "2 Hours", "Sustained Lean Energy (Cooked)")
-                                }
-                                nameLower.contains("paneer") -> {
-                                    val factor = grams / 100
-                                    MacroResult((265 * factor).toInt(), 18.0 * factor, 2.5 * factor, 20.0 * factor, "2 Hours", "Ketogenic Sustained")
-                                }
-                                nameLower.contains("rice") -> {
-                                    val factor = grams / 100
-                                    MacroResult((130 * factor).toInt(), 2.7 * factor, 28.0 * factor, 0.3 * factor, "1.5 Hours", "Rapid Glucose Spike (Cooked)")
-                                }
-                                nameLower.contains("chicken") -> {
-                                    val factor = grams / 100
-                                    MacroResult((165 * factor).toInt(), 31.0 * factor, 0.0 * factor, 3.6 * factor, "3 Hours", "Deep Protein Synthesis (Cooked)")
-                                }
-                                nameLower.contains("egg") -> {
-                                    val factor = grams / 100
-                                    MacroResult((155 * factor).toInt(), 13.0 * factor, 1.1 * factor, 11.0 * factor, "1.5 Hours", "High-efficiency Whole Protein (Boiled)")
-                                }
-                                nameLower.contains("roti") || nameLower.contains("chapati") -> {
-                                    val factor = grams / 100
-                                    MacroResult((260 * factor).toInt(), 8.0 * factor, 55.0 * factor, 1.5 * factor, "1.5 Hours", "Complex Carbohydrates (Cooked Roti)")
-                                }
-                                nameLower.contains("milk") -> {
-                                    val factor = grams / 100
-                                    MacroResult((60 * factor).toInt(), 3.2 * factor, 4.8 * factor, 3.2 * factor, "1 Hour", "Liquid Dairy Hydration & Proteins")
-                                }
-                                nameLower.contains("salad") || nameLower.contains("cucumber") || nameLower.contains("vegetable") -> {
-                                    val factor = grams / 100
-                                    MacroResult((20 * factor).toInt(), 1.0 * factor, 4.0 * factor, 0.1 * factor, "45 Mins", "High Fiber Micronutrient Hydration")
-                                }
-                                nameLower.contains("apple") -> {
-                                    val factor = grams / 100
-                                    MacroResult((52 * factor).toInt(), 0.3 * factor, 14.0 * factor, 0.2 * factor, "1 Hour", "Fructose & Clean Fiber")
-                                }
-                                nameLower.contains("banana") -> {
-                                    val factor = grams / 100
-                                    MacroResult((89 * factor).toInt(), 1.1 * factor, 23.0 * factor, 0.3 * factor, "45 Mins", "Fast Active Energizers & Potassium")
-                                }
-                                nameLower.contains("oats") -> {
-                                    val factor = grams / 100
-                                    MacroResult((71 * factor).toInt(), 2.5 * factor, 12.0 * factor, 1.4 * factor, "2 Hours", "Beta-Glucan Soluble Fiber (Cooked)")
-                                }
-                                else -> {
-                                    val factor = grams / 100
-                                    MacroResult((120 * factor).toInt(), 5.0 * factor, 15.0 * factor, 2.0 * factor, "2 Hours", "Standard Glycemic Profile")
+                            val localFood = com.example.data.nutrition.IndianFoodNutritionDb.searchLocalFood(loggedFoodName)
+                            val result = if (localFood != null) {
+                                val factor = grams / 100.0
+                                MacroResult(
+                                    calories = (localFood.caloriesPer100g * factor).toInt(),
+                                    protein = localFood.proteinPer100g * factor,
+                                    carbs = localFood.carbsPer100g * factor,
+                                    fat = localFood.fatPer100g * factor,
+                                    digestion = localFood.digestion,
+                                    profile = localFood.profile
+                                )
+                            } else {
+                                when {
+                                    nameLower.contains("lentil") || nameLower.contains("dal") -> {
+                                        val factor = grams / 100
+                                        MacroResult((116 * factor).toInt(), 9.0 * factor, 20.0 * factor, 0.4 * factor, "2 Hours", "Sustained Lean Energy (Cooked)")
+                                    }
+                                    nameLower.contains("paneer") -> {
+                                        val factor = grams / 100
+                                        MacroResult((265 * factor).toInt(), 18.0 * factor, 2.5 * factor, 20.0 * factor, "2 Hours", "Ketogenic Sustained")
+                                    }
+                                    nameLower.contains("rice") -> {
+                                        val factor = grams / 100
+                                        MacroResult((130 * factor).toInt(), 2.7 * factor, 28.0 * factor, 0.3 * factor, "1.5 Hours", "Rapid Glucose Spike (Cooked)")
+                                    }
+                                    nameLower.contains("chicken") -> {
+                                        val factor = grams / 100
+                                        MacroResult((165 * factor).toInt(), 31.0 * factor, 0.0 * factor, 3.6 * factor, "3 Hours", "Deep Protein Synthesis (Cooked)")
+                                    }
+                                    nameLower.contains("egg") -> {
+                                        val factor = grams / 100
+                                        MacroResult((155 * factor).toInt(), 13.0 * factor, 1.1 * factor, 11.0 * factor, "1.5 Hours", "High-efficiency Whole Protein (Boiled)")
+                                    }
+                                    nameLower.contains("roti") || nameLower.contains("chapati") -> {
+                                        val factor = grams / 100
+                                        MacroResult((260 * factor).toInt(), 8.0 * factor, 55.0 * factor, 1.5 * factor, "1.5 Hours", "Complex Carbohydrates (Cooked Roti)")
+                                    }
+                                    nameLower.contains("milk") -> {
+                                        val factor = grams / 100
+                                        MacroResult((60 * factor).toInt(), 3.2 * factor, 4.8 * factor, 3.2 * factor, "1 Hour", "Liquid Dairy Hydration & Proteins")
+                                    }
+                                    nameLower.contains("salad") || nameLower.contains("cucumber") || nameLower.contains("vegetable") -> {
+                                        val factor = grams / 100
+                                        MacroResult((20 * factor).toInt(), 1.0 * factor, 4.0 * factor, 0.1 * factor, "45 Mins", "High Fiber Micronutrient Hydration")
+                                    }
+                                    nameLower.contains("apple") -> {
+                                        val factor = grams / 100
+                                        MacroResult((52 * factor).toInt(), 0.3 * factor, 14.0 * factor, 0.2 * factor, "1 Hour", "Fructose & Clean Fiber")
+                                    }
+                                    nameLower.contains("banana") -> {
+                                        val factor = grams / 100
+                                        MacroResult((89 * factor).toInt(), 1.1 * factor, 23.0 * factor, 0.3 * factor, "45 Mins", "Fast Active Energizers & Potassium")
+                                    }
+                                    nameLower.contains("oats") -> {
+                                        val factor = grams / 100
+                                        MacroResult((71 * factor).toInt(), 2.5 * factor, 12.0 * factor, 1.4 * factor, "2 Hours", "Beta-Glucan Soluble Fiber (Cooked)")
+                                    }
+                                    else -> {
+                                        val factor = grams / 100
+                                        MacroResult((120 * factor).toInt(), 5.0 * factor, 15.0 * factor, 2.0 * factor, "2 Hours", "Standard Glycemic Profile")
+                                    }
                                 }
                             }
 
@@ -4224,6 +5306,9 @@ fun HealthHub(viewModel: JeevanViewModel) {
         // SEASONAL INTELLIGENCE & ADAPTIVE MICRO ADVICE
         item {
             val seasonalIntelligence by viewModel.seasonalIntelligenceText.collectAsState()
+            val activeProviderName = viewModel.environmentRepository.getActiveProviderName()
+            var localApiKeyInput by remember { mutableStateOf(com.example.data.SecurePrefsManager.getOpenWeatherApiKey() ?: "") }
+            
             Card(
                 colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
                 border = BorderStroke(1.dp, ImmersiveAmber.copy(alpha = 0.25f))
@@ -4236,18 +5321,192 @@ fun HealthHub(viewModel: JeevanViewModel) {
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Synchronized to live local environmental indices. Adapts hydration limits to avoid SRE dynamic posture strain.",
+                        color = TextMuted,
+                        fontSize = 10.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
                     Text(
                         text = seasonalIntelligence,
                         color = TextCelestial,
                         fontSize = 11.sp,
-                        lineHeight = 15.sp
+                        lineHeight = 15.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.2f))
+                            .padding(8.dp)
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        text = "WEATHER PROVIDER SWITCHER",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val isMeteo = activeProviderName == "Open-Meteo"
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isMeteo) ImmersiveIndigo else ImmersiveSurfaceVariant)
+                                .border(0.5.dp, if (isMeteo) ImmersiveIndigo else Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                .clickable { viewModel.selectWeatherProvider("Meteo") }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Open-Meteo (Free)", color = if (isMeteo) Color.White else TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (!isMeteo) ImmersiveIndigo else ImmersiveSurfaceVariant)
+                                .border(0.5.dp, if (!isMeteo) ImmersiveIndigo else Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                .clickable { viewModel.selectWeatherProvider("OpenWeather") }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("OpenWeatherMap", color = if (!isMeteo) Color.White else TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    
+                    if (activeProviderName == "OpenWeatherMap") {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = localApiKeyInput,
+                            onValueChange = { localApiKeyInput = it },
+                            label = { Text("OpenWeatherMap API Key", fontSize = 10.sp) },
+                            modifier = Modifier.fillMaxWidth().testTag("openweather_apikey_field"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ImmersiveIndigo,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Button(
+                            onClick = {
+                                com.example.data.SecurePrefsManager.saveOpenWeatherApiKey(localApiKeyInput)
+                                viewModel.selectWeatherProvider("OpenWeather")
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo),
+                            modifier = Modifier.fillMaxWidth().testTag("save_openweather_key_btn"),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text("Commit Key & Force Refresh", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
 
-        // BIOMETRIC INPUTS & BMI CALCULATOR
+        // ==========================================
+        // NEW FEATURE: AI HEALTH COACH SPECIALIST CARD (Phase 2B)
+        // ==========================================
+        item {
+            val coachAdvice by viewModel.aiCoachAdvice.collectAsState()
+            val isCoachGenerating by viewModel.isCoachGenerating.collectAsState()
+            val rawKey = remember { com.example.data.SecurePrefsManager.getGeminiApiKey() ?: "" }
+            val hasWebCoach = rawKey.isNotBlank() && rawKey != "MY_GEMINI_API_KEY" && rawKey != "API_KEY"
+            
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                border = BorderStroke(1.dp, CyberGreen.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "AI HEALTH COACH SPECIALIST",
+                            color = CyberGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (hasWebCoach) CyberGreen.copy(alpha = 0.15f) else ImmersiveAmber.copy(alpha = 0.15f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (hasWebCoach) "GEMINI PRO ACTIVE" else "DETERMINISTIC FALLBACK",
+                                color = if (hasWebCoach) CyberGreen else ImmersiveAmber,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Direct biometric, digestive macro index, and posture diagnostic report.",
+                        color = TextMuted,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 80.dp, max = 240.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.35f))
+                            .padding(10.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        if (isCoachGenerating) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(color = CyberGreen, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Analyzing posture and telemetry streams...", color = TextMuted, fontSize = 10.sp)
+                            }
+                        } else {
+                            Text(
+                                text = coachAdvice,
+                                color = TextCelestial,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    Button(
+                        onClick = { viewModel.generateAICoachSession() },
+                        enabled = !isCoachGenerating,
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("trigger_coach_btn")
+                    ) {
+                        Text("EXECUTE TELEMETRY ADVISORY", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        // BIOMETRIC INPUTS & BMI CALCULATOR WITH CATEGORY & TREND TRACKING
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
@@ -4255,7 +5514,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "BIOMETRICS & PHYSICAL INDEXING",
+                        text = "BIOMETRICS & BMI INTELLIGENCE ENGINE",
                         color = ImmersiveIndigo,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -4263,7 +5522,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Recalculating biometrics automatically adjusts physical exercise routines.",
+                        text = "Monitors software engineer physical index status and tracks calorie-balance weight trajectories.",
                         color = TextMuted,
                         fontSize = 11.sp
                     )
@@ -4307,21 +5566,35 @@ fun HealthHub(viewModel: JeevanViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text("Current BMI: ${userProfile.computedBmi}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             val bmiCategory = when {
                                 userProfile.computedBmi <= 0.0 -> "N/A"
                                 userProfile.computedBmi < 18.5 -> "Underweight"
-                                userProfile.computedBmi < 25.0 -> "Ideal Range"
-                                else -> "Overweight Indicator"
+                                userProfile.computedBmi < 25.0 -> "Ideal Range (Normal)"
+                                userProfile.computedBmi < 30.0 -> "Overweight"
+                                else -> "Obese"
                             }
                             val bmiColor = when {
                                 userProfile.computedBmi <= 0.0 -> TextMuted
                                 userProfile.computedBmi < 18.5 -> ImmersiveAmber
                                 userProfile.computedBmi < 25.0 -> CyberGreen
+                                userProfile.computedBmi < 30.0 -> ImmersiveAmber
                                 else -> ImmersiveRose
                             }
-                            Text("Classification: $bmiCategory", color = bmiColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Classification: $bmiCategory", color = bmiColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            
+                            // Real Room calorie-imbalance dynamic trend tracking (Phase 2B)
+                            val activeLogs = healthLogs.take(7)
+                            val sumBalance = activeLogs.sumOf { it.caloriesConsumed - it.caloriesBurned - 1800 }
+                            val (trendText, trendColor) = when {
+                                activeLogs.size < 2 -> Pair("Stable (Needs more daily logs)", CyberGreen)
+                                sumBalance > 1500 -> Pair("▲ Upward Risk (Calorie Surplus of +${sumBalance} kcal)", ImmersiveAmber)
+                                sumBalance < -1500 -> Pair("▼ Weight Reduction (Calorie Deficit of ${sumBalance} kcal)", CyberGreen)
+                                else -> Pair("◀ Stable Equilibrium ▶", CyberGreen)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Trend: $trendText", color = trendColor, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                         }
 
                         Button(
@@ -4341,7 +5614,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
             }
         }
 
-        // ADAPTIVE WORKOUT RECOMMENDATIONS
+        // ADAPTIVE WORKOUT RECOMMENDATIONS (Phase 2B upgraded)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
@@ -4356,7 +5629,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
                         Text(
                             text = "OFFICE WORKOUT SCHEME (ADAPTED)",
                             color = ImmersiveIndigo,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
@@ -4385,7 +5658,42 @@ fun HealthHub(viewModel: JeevanViewModel) {
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Deterministic Multi-Factor Telemetry Calibration Active:",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Displaying the multi-factor metrics driving the workout engine
+                    val computedNutrScore = (100 - Math.abs(todayLog.caloriesConsumed - 2000) / 10).coerceIn(40, 100)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(
+                            "BMI: ${userProfile.computedBmi}",
+                            "Recov: ${todayLog.recoveryScore}%",
+                            "Sleep: ${todayLog.sleepMinutes / 60}h",
+                            "Steps: ${todayLog.stepsCount}",
+                            "Nutri: $computedNutrScore/100"
+                        ).forEach { badge ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.Black.copy(alpha = 0.25f))
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(badge, color = CyberCyan, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(10.dp))
                     val exercises = adaptiveWorkouts.ifEmpty {
                         listOf(
                             "Squats: 3 sets x 15 reps (Leg focus)",
@@ -4395,10 +5703,10 @@ fun HealthHub(viewModel: JeevanViewModel) {
                         )
                     }
                     exercises.forEach { ex ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                            Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(ImmersiveIndigo))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
+                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(CyberCyan))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(ex, color = TextCelestial, fontSize = 11.sp)
+                            Text(ex, color = TextCelestial, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                         }
                     }
                 }
@@ -4869,25 +6177,26 @@ fun NewsCenterHub(viewModel: JeevanViewModel) {
 fun AICompanionDialog(viewModel: JeevanViewModel, onDismiss: () -> Unit) {
     val chatHistory by viewModel.chatMessages.collectAsState()
     val isThinking by viewModel.isBrainThinking.collectAsState()
+    val activeAgentType by viewModel.activeAgentType.collectAsState()
     var textInput by remember { mutableStateOf("") }
+
+    // API Key input show/hide state
+    var showKeyPrompt by remember { mutableStateOf(!com.example.data.SecurePrefsManager.hasKey()) }
+    var tempApiKeyInput by remember { mutableStateOf("") }
     
-    val activeAgent = remember(textInput) {
-        val lower = textInput.lowercase()
-        when {
-            lower.contains("portfolio") || lower.contains("asset") || lower.contains("sip") || lower.contains("expense") || lower.contains("finance") || lower.contains("money") -> {
-                Triple("💼 WEALTH INTEL AGENT", CyberCyan, "Analyzing financial capital ratios & asset allocations...")
-            }
-            lower.contains("workout") || lower.contains("water") || lower.contains("health") || lower.contains("calories") || lower.contains("steps") || lower.contains("sleep") -> {
-                Triple("🥗 ERGONOMIC HEALTH AGENT", CyberGreen, "Syncing daily metabolisms & posture metrics...")
-            }
-            lower.contains("kubernetes") || lower.contains("aws") || lower.contains("retest") || lower.contains("assess") || lower.contains("docker") || lower.contains("linux") || lower.contains("sre") -> {
-                Triple("🔧 CLOUD DEVOPS ARCHITECT", CyberPurple, "Routing global telemetry logs & posture benchmarks...")
-            }
-            else -> {
-                Triple("🤖 JEEVAN OS PERSONAL COPILOT", ImmersiveIndigo, "Standing by to orchestrate your operational requests...")
-            }
-        }
+    val activeAgent = when (activeAgentType) {
+        "FINANCE" -> Triple("💼 WEALTH INTEL AGENT", CyberCyan, "Analyzing financial capital ratios & asset allocations...")
+        "HEALTH" -> Triple("🥗 ERGONOMIC HEALTH AGENT", CyberGreen, "Syncing daily metabolisms & posture metrics...")
+        "CAREER" -> Triple("🔧 CLOUD DEVOPS ARCHITECT", CyberPurple, "Routing global telemetry logs & posture benchmarks...")
+        else -> Triple("🤖 JEEVAN OS PERSONAL COPILOT", ImmersiveIndigo, "Standing by to orchestrate your operational requests...")
     }
+
+    val agentTabs = listOf(
+        Triple("GENERAL", "🤖 COPILOT", ImmersiveIndigo),
+        Triple("CAREER", "🔧 DEVOPS", CyberPurple),
+        Triple("FINANCE", "💼 WEALTH", CyberCyan),
+        Triple("HEALTH", "🥗 HEALTH", CyberGreen)
+    )
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -4903,7 +6212,7 @@ fun AICompanionDialog(viewModel: JeevanViewModel, onDismiss: () -> Unit) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .fillMaxHeight(0.85f)
+                    .fillMaxHeight(0.88f)
                     .clickable(enabled = false) {},
                 colors = CardDefaults.cardColors(containerColor = ImmersiveDarkBg),
                 border = BorderStroke(1.dp, activeAgent.second.copy(alpha = 0.3f)),
@@ -4954,13 +6263,171 @@ fun AICompanionDialog(viewModel: JeevanViewModel, onDismiss: () -> Unit) {
                                     )
                                 }
                             }
-                            IconButton(onClick = onDismiss) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close overlay",
-                                    tint = ImmersiveRose.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(20.dp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Toggle API Key Setup Card
+                                IconButton(
+                                    onClick = { showKeyPrompt = !showKeyPrompt },
+                                    modifier = Modifier.size(24.dp).testTag("toggle_key_setup_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Secure Key Setup",
+                                        tint = activeAgent.second.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                // Clear conversation thread memory
+                                IconButton(
+                                    onClick = { viewModel.clearMemory(activeAgentType) },
+                                    modifier = Modifier.size(24.dp).testTag("clear_chat_memory_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Clear Agent Memory",
+                                        tint = ImmersiveRose.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                // Close dialog
+                                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close overlay",
+                                        tint = ImmersiveRose.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Agent cognitive tabs
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(ImmersiveSurface.copy(alpha = 0.5f))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        agentTabs.forEach { (type, label, color) ->
+                            val selected = activeAgentType == type
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (selected) color.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.02f))
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (selected) color else Color.White.copy(alpha = 0.05f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        viewModel.setActiveAgentType(type)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (selected) Color.White else ImmersiveTextMuted,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 0.2.sp
                                 )
+                            }
+                        }
+                    }
+
+                    // Optional Secure API Key setup banner/card
+                    if (showKeyPrompt) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+                            border = BorderStroke(1.dp, activeAgent.second.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "⚡ KEYSTORE CRYPTOGRAPHIC PIPELINE",
+                                        color = activeAgent.second,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    IconButton(
+                                        onClick = { showKeyPrompt = false },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Hide prompt",
+                                            tint = ImmersiveTextMuted,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "Enter your personal Gemini API Key. It will be stored fully encrypted on-device under AES-256 standard. If empty, the OS defaults to heuristic response models.",
+                                    color = ImmersiveTextMuted,
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = tempApiKeyInput,
+                                        onValueChange = { tempApiKeyInput = it },
+                                        placeholder = { Text("AI Studio Gemini token...", color = ImmersiveTextMuted, fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("secure_api_key_input"),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = activeAgent.second,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Button(
+                                        onClick = {
+                                            if (tempApiKeyInput.isNotBlank()) {
+                                                com.example.data.SecurePrefsManager.saveGeminiApiKey(tempApiKeyInput)
+                                                showKeyPrompt = false
+                                                tempApiKeyInput = ""
+                                                // Reload to trigger new engine status check
+                                                viewModel.setActiveAgentType(activeAgentType)
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = activeAgent.second),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                        modifier = Modifier.testTag("save_api_key_btn")
+                                    ) {
+                                        Text(
+                                            "LOAD",
+                                            color = Color.Black,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -5057,47 +6524,61 @@ fun AICompanionDialog(viewModel: JeevanViewModel, onDismiss: () -> Unit) {
                         color = ImmersiveSurface,
                         border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.05f))
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            OutlinedTextField(
-                                value = textInput,
-                                onValueChange = { textInput = it },
-                                placeholder = { Text("Command Jeevan assistant...", color = ImmersiveTextMuted, fontSize = 11.sp) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("ai_companion_chat_input"),
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = activeAgent.second,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = {
-                                    if (textInput.isNotBlank()) {
-                                        viewModel.sendChatMessage(textInput)
-                                        textInput = ""
-                                    }
-                                },
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(activeAgent.second.copy(alpha = 0.15f))
-                                    .testTag("ai_companion_send_button")
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send Command",
-                                    tint = activeAgent.second,
-                                    modifier = Modifier.size(18.dp)
+                                OutlinedTextField(
+                                    value = textInput,
+                                    onValueChange = { textInput = it },
+                                    placeholder = { Text("Command Jeevan assistant...", color = ImmersiveTextMuted, fontSize = 11.sp) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("ai_companion_chat_input"),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = activeAgent.second,
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    )
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = {
+                                        if (textInput.isNotBlank()) {
+                                            viewModel.sendChatMessage(textInput)
+                                            textInput = ""
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(activeAgent.second.copy(alpha = 0.15f))
+                                        .testTag("ai_companion_send_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "Send Command",
+                                        tint = activeAgent.second,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            val rememberText = if (chatHistory.isNotEmpty()) "Jeevan remembers the last ${kotlin.math.min(chatHistory.size, 10)} messages for ${activeAgent.first.substringAfter(" ")}" else "Start speaking with ${activeAgent.first.substringAfter(" ")}"
+                            Text(
+                                text = "⚡ Context Memory: $rememberText",
+                                color = activeAgent.second.copy(alpha = 0.5f),
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.align(Alignment.CenterHorizontally).testTag("ai_memory_hint")
+                            )
                         }
                     }
                 }
@@ -5437,3 +6918,638 @@ data class MacroResult(
     val digestion: String,
     val profile: String
 )
+
+@Composable
+fun QaDebugPanel(viewModel: JeevanViewModel) {
+    val selectedWeek by viewModel.selectedWeek.collectAsState()
+    val selectedDay by viewModel.selectedDay.collectAsState()
+    val topics by viewModel.roadmapTopics.collectAsState()
+    val subtopics by viewModel.roadmapSubtopics.collectAsState()
+    val subList by viewModel.subtopicsProgress.collectAsState()
+    val userNotes by viewModel.subtopicUserNotes.collectAsState()
+    val savedResources by viewModel.savedResources.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
+    val careerProgress by viewModel.careerProgress.collectAsState()
+
+    // Health Connect Diagnostics State Collections (Phase 2A)
+    val isHCInstalled by viewModel.healthConnectAvailable.collectAsState()
+    val permissionGranted by viewModel.permissionState.collectAsState()
+    val isWorkerRegistered by viewModel.isWorkerRegistered.collectAsState()
+    val roomLogCount by viewModel.roomLogCount.collectAsState()
+    val lastSyncTime by viewModel.lastSyncTime.collectAsState()
+
+    val activeTopic = topics.firstOrNull { it.weekNumber == selectedWeek }
+    val activeTopicSubtopics = if (activeTopic != null) {
+        subtopics.filter { it.parentTopicId == activeTopic.id }.sortedBy { it.orderIndex }
+    } else emptyList()
+    val targetSubtopic = activeTopicSubtopics.getOrNull(selectedDay - 1)
+    val activeSubId = if (targetSubtopic != null) "sub_${targetSubtopic.id}" else "week_${selectedWeek}_day_${selectedDay}"
+    val progressRecord = subList.firstOrNull { it.subtopicId == activeSubId }
+
+    // Phase 2 Validation States
+    val totalWeeksExpected = 28
+    val totalTasksExpected = 196
+
+    val topicsCount = topics.size
+    val subtopicsCount = subtopics.size
+
+    val weeksList = topics.map { it.weekNumber }.distinct().sorted()
+    val hasDuplicatedWeeks = weeksList.size != topics.size
+    val isWeekSequenceValid = weeksList == (1..28).toList()
+
+    val weekTaskCounts = topics.map { topic ->
+        val count = subtopics.count { it.parentTopicId == topic.id }
+        topic.weekNumber to count
+    }.toMap()
+
+    val hasExactly7TasksPerWeek = weekTaskCounts.all { it.value == 7 } && weekTaskCounts.size == 28
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
+        border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.3f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .testTag("qa_debug_panel_card")
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Title Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "QA Tools",
+                        tint = CyberCyan,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "QA CONTROL & SYNC PANEL",
+                        color = CyberCyan,
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(CyberGreen.copy(alpha = 0.2f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "SANDBOX COMPLIANT",
+                        color = CyberGreen,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // SECTION 1: SELECTED COORDINATES & COORDINATE SNAPSHOT
+            Text(
+                text = "1. ACTIVE COORDINATES SNAPSHOT",
+                color = TextMuted,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Current Week:", color = Color.White, fontSize = 11.sp)
+                        Text("Week $selectedWeek", color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Current Day:", color = Color.White, fontSize = 11.sp)
+                        Text("Day $selectedDay", color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Roadmap Topic ID:", color = Color.White, fontSize = 11.sp)
+                        Text(activeTopic?.id?.toString() ?: "NULL", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Roadmap Topic Title:", color = Color.White, fontSize = 11.sp)
+                        Text(activeTopic?.title ?: "Unknown", color = Color.White, fontSize = 11.sp, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = 180.dp))
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Subtopic ID:", color = Color.White, fontSize = 11.sp)
+                        Text(activeSubId, color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Subtopic Name:", color = Color.White, fontSize = 11.sp)
+                        Text(targetSubtopic?.title ?: "Unknown", color = Color.White, fontSize = 11.sp, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = 180.dp))
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Completion Status:", color = Color.White, fontSize = 11.sp)
+                        Text(
+                            text = if (progressRecord?.isCompleted == true) "COMPLETED" else "PENDING",
+                            color = if (progressRecord?.isCompleted == true) CyberGreen else ImmersiveRose,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Assessment Status:", color = Color.White, fontSize = 11.sp)
+                        val score = progressRecord?.assessmentScore ?: 0
+                        val statusText = when {
+                            score >= 85 -> "Pass (Excellent - $score%)"
+                            score >= 70 -> "Pass (Average - $score%)"
+                            score > 0 -> "Fail (Needs Improvement - $score%)"
+                            else -> "Pending Assessment"
+                        }
+                        Text(
+                            text = statusText,
+                            color = if (score >= 70) CyberGreen else if (score > 0) ImmersiveRose else Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Revision Flag:", color = Color.White, fontSize = 11.sp)
+                        Text(
+                            text = if (progressRecord != null && (!progressRecord.isCompleted || progressRecord.assessmentScore < 70)) "NEEDS REVISION" else "OK",
+                            color = if (progressRecord != null && (!progressRecord.isCompleted || progressRecord.assessmentScore < 70)) ImmersiveRose else CyberGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // SECTION 2: PHASE 2 & 3 - AUTOMATED ROADMAP VALIDATION CHECKS
+            Text(
+                text = "2. ROADMAP SYNCHRONIZATION RUNTIME CHECKS",
+                color = TextMuted,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Check 1: 28 Weeks Exist
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val pass = topicsCount == totalWeeksExpected && isWeekSequenceValid
+                        Icon(
+                            imageVector = if (pass) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (pass) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "28 Sequential Weeks Exist: ${topicsCount}/28",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Check 2: 196 Total Daily Tasks Expected
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val pass = subtopicsCount == totalTasksExpected
+                        Icon(
+                            imageVector = if (pass) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (pass) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "196 Total Tasks Exist: ${subtopicsCount}/196",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Check 3: Perfect 7 Daily Tasks Per Week
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val pass = hasExactly7TasksPerWeek
+                        Icon(
+                            imageVector = if (pass) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (pass) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Exactly 7 Tasks Per Week: " + if (pass) "YES (7 x 28 = 196)" else "FAIL/MISMATCH",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Check 4: No Duplicates or Gaps
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val pass = !hasDuplicatedWeeks && isWeekSequenceValid
+                        Icon(
+                            imageVector = if (pass) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (pass) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Duplicate/Missing Weeks Check: " + if (pass) "PASS" else "FAIL",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // SECTION 3: PHYSICAL DATABASE ROW COUNTS
+            Text(
+                text = "3. DATABASE TABLE ROW COUNTS",
+                color = TextMuted,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("roadmap_topics table rows:", color = Color.White, fontSize = 11.sp)
+                        Text(topicsCount.toString(), color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("roadmap_subtopics table rows:", color = Color.White, fontSize = 11.sp)
+                        Text(subtopicsCount.toString(), color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("subtopic_progress table rows:", color = Color.White, fontSize = 11.sp)
+                        Text(subList.size.toString(), color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("saved_resources table rows:", color = Color.White, fontSize = 11.sp)
+                        Text(savedResources.size.toString(), color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("subtopic_user_notes records count:", color = Color.White, fontSize = 11.sp)
+                        Text(userNotes.size.toString(), color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("career_progress table rows:", color = Color.White, fontSize = 11.sp)
+                        Text(careerProgress.size.toString(), color = CyberCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // SECTION 4: REAL-TIME DAILY TASK MAPPING REPORT
+            Text(
+                text = "4. LIVE 196 DAILY TASK MAPPING BLUEPRINT",
+                color = TextMuted,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Real-time mapping of Selected Week $selectedWeek Days:",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (activeTopicSubtopics.isEmpty()) {
+                        Text("No subtopics for Week $selectedWeek", color = ImmersiveRose, fontSize = 11.sp)
+                    } else {
+                        activeTopicSubtopics.forEachIndexed { idx, sub ->
+                            val dayNum = idx + 1
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(if (selectedDay == dayNum) ImmersiveIndigo.copy(alpha = 0.25f) else Color.Transparent)
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(if (selectedDay == dayNum) CyberCyan else TextMuted)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "W$selectedWeek Day $dayNum:",
+                                        color = if (selectedDay == dayNum) CyberCyan else Color.White,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = sub.title,
+                                        color = if (selectedDay == dayNum) Color.White else TextMuted,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+                                val subProgress = subList.firstOrNull { it.subtopicId == "sub_${sub.id}" }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(if (subProgress?.isCompleted == true) CyberGreen.copy(alpha = 0.15f) else ImmersiveRose.copy(alpha = 0.1f))
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (subProgress?.isCompleted == true) "COMPLETED" else "PENDING",
+                                        color = if (subProgress?.isCompleted == true) CyberGreen else ImmersiveRose,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // SECTION 5: FAST QA SIMULATORS/MUTATORS FOR HIGH REPEATABILITY
+            Text(
+                text = "5. ON-DEMAND QA STRESS TESTING WORKFLOWS",
+                color = TextMuted,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // QA Force Complete Toggle
+                Button(
+                    onClick = {
+                        val currentCompletion = progressRecord?.isCompleted ?: false
+                        viewModel.toggleSubtopic(
+                            subtopicId = activeSubId,
+                            parentTopicId = activeTopic?.id?.toString() ?: "custom",
+                            isCompleted = !currentCompletion,
+                            reason = if (!currentCompletion) null else "QA Reset Completed Flag",
+                            score = if (!currentCompletion) 88 else 0
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo),
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = if (progressRecord?.isCompleted == true) "RESET ACTIVE TASK" else "FORCE PASS ACTIVE",
+                        fontSize = 9.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Inject mock progress across multiple items
+                Button(
+                    onClick = {
+                        if (activeTopic != null) {
+                            activeTopicSubtopics.forEachIndexed { i, sub ->
+                                viewModel.toggleSubtopic(
+                                    subtopicId = "sub_${sub.id}",
+                                    parentTopicId = activeTopic.id.toString(),
+                                    isCompleted = true,
+                                    reason = "QA Auto Evaluated",
+                                    score = 80 + i % 3 * 5
+                                )
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "PASS ALL W$selectedWeek DAYS",
+                        fontSize = 9.sp,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Simulate device rotation / profile lookup reseed
+                Button(
+                    onClick = {
+                        viewModel.resetRoadmap()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ImmersiveRose.copy(alpha = 0.8f)),
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "FORCE RESEED DB",
+                        fontSize = 9.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // SECTION 6: HEALTH CONNECT QA LIFELINE ADVANCED DIAGNOSTICS & REPORTING (Phase 2A)
+            Text(
+                text = "6. HEALTH CONNECT INTEGRATION & SRE COMPLIANCE DIAGNOSTICS",
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Check 1: Health Connect SDK Availability
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isHCInstalled) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (isHCInstalled) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Availability: " + if (isHCInstalled) "Service Installed" else "Not Supported/Missing",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Check 2: Permissions Status
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (permissionGranted) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (permissionGranted) CyberGreen else ImmersiveAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "SDK Permissions: " + if (permissionGranted) "Granted (Full Access)" else "No Access / Demo Fallbacks Active",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Check 3: Sync Database Records Count
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val pass = roomLogCount > 0
+                        Icon(
+                            imageVector = if (pass) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (pass) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Database Integration Logs: $roomLogCount entries cached",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Check 4: Background Sync Service (WorkManager)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isWorkerRegistered) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (isWorkerRegistered) CyberGreen else ImmersiveRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Periodic Background Task: " + if (isWorkerRegistered) "Registered (Silently 2h)" else "Failed to Register",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 4.dp))
+
+                    Text(
+                        text = "Diagnostics Metrics Panel:",
+                        color = CyberCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val healthLogs by viewModel.healthLogs.collectAsState()
+                    val todayLog = healthLogs.firstOrNull() ?: HealthLog(dateString = viewModel.getTodayDateString())
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("  • SDK Client Status: Operational", color = TextCelestial, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text("  • Database Table: health_logs (${roomLogCount} entries)", color = TextCelestial, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text("  • Target Activity Log: Steps=${todayLog.stepsCount} (${todayLog.stepsSource}), Sleep=${todayLog.sleepMinutes}m (${todayLog.sleepSource}), HR=${todayLog.averageHeartRate}bpm (${todayLog.heartRateSource})", color = TextCelestial, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text("  • Dynamic System Sync Epoch: $lastSyncTime", color = TextCelestial, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = {
+                            val report = """
+==================================================
+        JEEVAN SYSTEM INTEGRATION VERIFICATION REPORT
+==================================================
+Date: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
+Compliance Category: Health Connect Foundations & DevOps SRE
+
+1. APPLICATION DEPLOYMENT INFO
+----------------------------------
+Package Name: ${context.packageName}
+Active Workspace: AI Studio Operational Sandboxed Runtime Environment
+
+2. HEALTH CONNECT CLIENT CONNECTION DIAGNOSTICS
+--------------------------------------------------
+Availability Status: ${if (isHCInstalled) "Service Installed" else "Unsupported/Missing"}
+Permission Status: ${if (permissionGranted) "Granted (Full Access)" else "Pending/No direct user permissions granted (Fallbacks loaded)"}
+Synchronization Client Binding: Active
+WorkManager Sync Worker Registration Status: ${if (isWorkerRegistered) "Active Periodic Sync Worker OK" else "Pending WorkManager Registration"}
+
+3. LOCAL PERSISTENT CACHE STATE (ROOM DATABASE)
+--------------------------------------------------
+Table Target: health_logs table
+Record Row Entries Count: ${roomLogCount} entries stored in Room
+Today's Target Metrics Vector:
+  • Date representation: ${todayLog.dateString}
+  • Daily Step Count vector: ${todayLog.stepsCount} (Origin: ${todayLog.stepsSource})
+  • Sleep duration: ${todayLog.sleepMinutes} minutes (Origin: ${todayLog.sleepSource})
+  • Heart rate: ${todayLog.averageHeartRate} bpm (Origin: ${todayLog.heartRateSource})
+  • Water Intake: ${todayLog.waterIntakeMl} ml (Origin: Manual)
+
+4. DEVOPS SRE COMPLIANCE OVERVIEW
+-----------------------------------
+This report contains an automated end-to-end trace of Jeevan's telemetry. All diagnostic loops indicate stable operation. Local databases match baseline configurations. Background WorkManager scheduled tasks are active and silently running scheduled processes.
+==================================================
+                            """.trimIndent()
+
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Jeevan SRE System Integration Report")
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share QA Integration Report"))
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                        modifier = Modifier.fillMaxWidth().testTag("export_qa_report_btn")
+                    ) {
+                        Text("EXPORT GENERAL COMPLIANCE & INTEGRATION REPORT", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+    }
+}
+

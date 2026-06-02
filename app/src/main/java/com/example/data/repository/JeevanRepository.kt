@@ -1,11 +1,16 @@
 package com.example.data.repository
 
+import android.util.Log
+import com.example.data.HealthConnectManager
 import com.example.data.dao.JeevanDao
 import com.example.data.entity.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.Locale
 
@@ -21,6 +26,8 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
     val allPortfolioHoldings: Flow<List<PortfolioHolding>> = jeevanDao.getAllPortfolioHoldingsFlow()
     val allCareerGoalFunds: Flow<List<CareerGoalFund>> = jeevanDao.getAllCareerGoalFundsFlow()
     val allSavedResources: Flow<List<SavedResource>> = jeevanDao.getAllSavedResourcesFlow()
+    val allRoadmapTopics: Flow<List<RoadmapTopic>> = jeevanDao.getAllTopicsFlow()
+    val allRoadmapSubtopics: Flow<List<RoadmapSubtopic>> = jeevanDao.getAllSubtopicsFlow()
 
     // --- Profile Management ---
     suspend fun getOrInitUserProfile(): UserProfile = withContext(Dispatchers.IO) {
@@ -262,16 +269,33 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
         jeevanDao.getHealthLogByDate(today) ?: HealthLog(dateString = today)
     }
 
+    suspend fun recalculateAndSaveTodayRecoveryScore(todayLog: HealthLog): HealthLog {
+        val yesterday = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(System.currentTimeMillis() - 86400000L))
+        val yesterdayLog = jeevanDao.getHealthLogByDate(yesterday)
+        val prevSleep = yesterdayLog?.sleepMinutes ?: 480
+        val prevSteps = yesterdayLog?.stepsCount ?: 5000
+        val score = com.example.data.engine.RecoveryScoreEngine.calculateRecoveryScore(
+            sleepMinutes = todayLog.sleepMinutes,
+            averageHeartRate = todayLog.averageHeartRate,
+            stepsCount = todayLog.stepsCount,
+            previousDaySleepMinutes = prevSleep,
+            previousDayStepsCount = prevSteps
+        )
+        return todayLog.copy(recoveryScore = score)
+    }
+
     suspend fun updateWaterIntake(addMl: Int): Unit = withContext(Dispatchers.IO) {
         val log = getTodayHealthLog()
         val updated = log.copy(waterIntakeMl = (log.waterIntakeMl + addMl).coerceAtLeast(0))
-        jeevanDao.insertHealthLog(updated)
+        val withRecovery = recalculateAndSaveTodayRecoveryScore(updated)
+        jeevanDao.insertHealthLog(withRecovery)
     }
 
     suspend fun updateSteps(steps: Int): Unit = withContext(Dispatchers.IO) {
         val log = getTodayHealthLog()
         val updated = log.copy(stepsCount = (log.stepsCount + steps).coerceAtLeast(0))
-        jeevanDao.insertHealthLog(updated)
+        val withRecovery = recalculateAndSaveTodayRecoveryScore(updated)
+        jeevanDao.insertHealthLog(withRecovery)
     }
 
     suspend fun updateSleepAndCal(sleepMin: Int, calConsumed: Int, calBurned: Int): Unit = withContext(Dispatchers.IO) {
@@ -281,7 +305,8 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             caloriesConsumed = calConsumed,
             caloriesBurned = calBurned
         )
-        jeevanDao.insertHealthLog(updated)
+        val withRecovery = recalculateAndSaveTodayRecoveryScore(updated)
+        jeevanDao.insertHealthLog(withRecovery)
     }
 
     suspend fun updateMoodAndJournal(score: Int, entry: String): Unit = withContext(Dispatchers.IO) {
@@ -290,7 +315,8 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             moodScore = score,
             journalEntry = entry
         )
-        jeevanDao.insertHealthLog(updated)
+        val withRecovery = recalculateAndSaveTodayRecoveryScore(updated)
+        jeevanDao.insertHealthLog(withRecovery)
     }
 
     // --- Seed Demo Data helper if empty ---
@@ -459,4 +485,115 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
             }
         }
     }
+
+    // --- AI Conversations ---
+    suspend fun getRecentConversations(agentType: String, limit: Int = 10): List<com.example.data.entity.AiConversation> = withContext(Dispatchers.IO) {
+        jeevanDao.getRecentConversations(agentType, limit)
+    }
+
+    suspend fun insertMessage(conversation: com.example.data.entity.AiConversation): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.insertMessage(conversation)
+    }
+
+    suspend fun clearConversations(agentType: String): Unit = withContext(Dispatchers.IO) {
+        jeevanDao.clearConversations(agentType)
+    }
+
+    // --- Roadmap Topics ---
+    suspend fun getAllRoadmapTopicsDirect(): List<RoadmapTopic> = withContext(Dispatchers.IO) {
+        jeevanDao.getAllTopicsDirect()
+    }
+
+    suspend fun insertRoadmapTopic(topic: RoadmapTopic): Long = withContext(Dispatchers.IO) {
+        jeevanDao.insertTopic(topic)
+    }
+
+    suspend fun insertRoadmapTopics(topics: List<RoadmapTopic>) = withContext(Dispatchers.IO) {
+        jeevanDao.insertTopics(topics)
+    }
+
+    suspend fun updateRoadmapTopic(topic: RoadmapTopic) = withContext(Dispatchers.IO) {
+        jeevanDao.updateTopic(topic)
+    }
+
+    suspend fun deleteRoadmapTopic(topic: RoadmapTopic) = withContext(Dispatchers.IO) {
+        jeevanDao.deleteTopic(topic)
+        jeevanDao.deleteSubtopicsByTopic(topic.id)
+    }
+
+    suspend fun clearAllRoadmapData() = withContext(Dispatchers.IO) {
+        jeevanDao.deleteAllTopics()
+        jeevanDao.deleteAllSubtopics()
+    }
+
+    // --- Roadmap Subtopics ---
+    fun getSubtopicsByTopicFlow(parentTopicId: Int): Flow<List<RoadmapSubtopic>> {
+        return jeevanDao.getSubtopicsByTopicFlow(parentTopicId)
+    }
+
+    suspend fun getSubtopicsByTopicDirect(parentTopicId: Int): List<RoadmapSubtopic> = withContext(Dispatchers.IO) {
+        jeevanDao.getSubtopicsByTopicDirect(parentTopicId)
+    }
+
+    suspend fun insertRoadmapSubtopic(subtopic: RoadmapSubtopic) = withContext(Dispatchers.IO) {
+        jeevanDao.insertSubtopic(subtopic)
+    }
+
+    suspend fun insertRoadmapSubtopics(subtopics: List<RoadmapSubtopic>) = withContext(Dispatchers.IO) {
+        jeevanDao.insertSubtopics(subtopics)
+    }
+
+    suspend fun updateRoadmapSubtopic(subtopic: RoadmapSubtopic) = withContext(Dispatchers.IO) {
+        jeevanDao.updateSubtopic(subtopic)
+    }
+
+    suspend fun deleteRoadmapSubtopic(subtopic: RoadmapSubtopic) = withContext(Dispatchers.IO) {
+        jeevanDao.deleteSubtopic(subtopic)
+    }
+
+    suspend fun syncHealthFromConnect(healthConnectManager: HealthConnectManager): SyncResult = withContext(Dispatchers.IO) {
+        try {
+            val status = healthConnectManager.checkInstallStatus()
+            if (status != HealthConnectManager.InstallStatus.INSTALLED) {
+                return@withContext SyncResult.UNAVAILABLE
+            }
+            if (!healthConnectManager.checkPermissionsGranted()) {
+                return@withContext SyncResult.PERMISSION_REQUIRED
+            }
+
+            val now = Instant.now()
+            val startOfToday = now.minus(24, ChronoUnit.HOURS)
+
+            val stepsJob = async { healthConnectManager.readSteps(startOfToday, now) }
+            val sleepJob = async { healthConnectManager.readSleepMinutes(startOfToday, now) }
+            val hrJob = async { healthConnectManager.readAverageHeartRate(startOfToday, now) }
+
+            val steps = stepsJob.await()
+            val sleepMin = sleepJob.await()
+            val heartRate = hrJob.await()
+
+            val existingLog = getTodayHealthLog()
+            val updatedLog = existingLog.copy(
+                stepsCount = steps,
+                sleepMinutes = sleepMin,
+                averageHeartRate = heartRate,
+                stepsSource = "Synced",
+                sleepSource = "Synced",
+                heartRateSource = "Synced"
+            )
+            val withRecovery = recalculateAndSaveTodayRecoveryScore(updatedLog)
+            jeevanDao.insertHealthLog(withRecovery)
+            SyncResult.SUCCESS
+        } catch (e: Throwable) {
+            Log.e("JeevanRepository", "Error syncing health data from Health Connect", e)
+            SyncResult.ERROR
+        }
+    }
+}
+
+enum class SyncResult {
+    SUCCESS,
+    PERMISSION_REQUIRED,
+    UNAVAILABLE,
+    ERROR
 }

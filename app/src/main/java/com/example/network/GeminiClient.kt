@@ -57,8 +57,12 @@ object GeminiNetworkClient {
      * Executes content generation query with background thread dispatcher protection,
      * intelligent multi-agent routing based on intent, and live DB context injection.
      */
-    suspend fun queryJeevanEngine(prompt: String, memoryContext: String): String = withContext(Dispatchers.IO) {
-        val rawKey = BuildConfig.GEMINI_API_KEY
+    suspend fun queryJeevanEngine(
+        prompt: String, 
+        memoryContext: String,
+        conversationHistory: List<com.example.data.entity.AiConversation> = emptyList()
+    ): String = withContext(Dispatchers.IO) {
+        val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
         val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
 
         // Decide the persona/intent agent routing
@@ -77,20 +81,28 @@ object GeminiNetworkClient {
                 Below is the live diagnostic state of the user's local database parameters.
                 Use this data to provide deeply personalized, relevant, and precise advice. Avoid repeating generic instructions if they are not necessary:
                 
-                $memoryContext
+                ${memoryContext}
             """.trimIndent()
 
-            val combinedPayload = "$systemInstructions\n\nUser Question: $prompt"
+            val contents = mutableListOf<GeminiContent>()
 
-            val requestBody = GeminiRequest(
-                contents = listOf(
-                    GeminiContent(
-                        parts = listOf(
-                            GeminiPart(text = combinedPayload)
-                        )
-                    )
-                )
-            )
+            if (conversationHistory.isEmpty()) {
+                val combinedPayload = "$systemInstructions\n\nUser Question: $prompt"
+                contents.add(GeminiContent(parts = listOf(GeminiPart(text = combinedPayload)), role = "user"))
+            } else {
+                conversationHistory.forEachIndexed { index, msg ->
+                    val apiRole = if (msg.role.lowercase().contains("user") || msg.role.lowercase().contains("you")) "user" else "model"
+                    val contentText = if (index == 0 && apiRole == "user") {
+                        "$systemInstructions\n\n[Previous Conversation history]:\n${msg.content}"
+                    } else {
+                        msg.content
+                    }
+                    contents.add(GeminiContent(parts = listOf(GeminiPart(text = contentText)), role = apiRole))
+                }
+                contents.add(GeminiContent(parts = listOf(GeminiPart(text = prompt)), role = "user"))
+            }
+
+            val requestBody = GeminiRequest(contents = contents)
             val response = apiService.generateContent(rawKey, requestBody)
             val extractedText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
             if (!extractedText.isNullOrBlank()) {

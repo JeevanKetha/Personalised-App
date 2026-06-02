@@ -10,6 +10,8 @@ import com.example.data.entity.NewsBookmark
 import com.example.data.entity.PortfolioHolding
 import com.example.data.entity.CareerGoalFund
 import com.example.data.entity.SavedResource
+import com.example.data.entity.RoadmapTopic
+import com.example.data.entity.RoadmapSubtopic
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -129,4 +131,64 @@ interface JeevanDao {
 
     @Query("SELECT * FROM saved_resources")
     suspend fun getAllSavedResourcesDirect(): List<SavedResource>
+
+    // --- AI Conversations Queries ---
+    @Query("SELECT * FROM ai_conversations WHERE agentType = :agentType ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentConversations(agentType: String, limit: Int = 10): List<com.example.data.entity.AiConversation>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessage(conversation: com.example.data.entity.AiConversation)
+
+    @Query("DELETE FROM ai_conversations WHERE agentType = :agentType")
+    suspend fun clearConversations(agentType: String)
+
+    // --- Roadmap Topic Queries ---
+    @Query("SELECT * FROM roadmap_topics ORDER BY orderIndex ASC")
+    fun getAllTopicsFlow(): Flow<List<RoadmapTopic>>
+
+    @Query("SELECT * FROM roadmap_topics ORDER BY orderIndex ASC")
+    suspend fun getAllTopicsDirect(): List<RoadmapTopic>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTopic(topic: RoadmapTopic): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTopics(topics: List<RoadmapTopic>)
+
+    @Update
+    suspend fun updateTopic(topic: RoadmapTopic)
+
+    @Delete
+    suspend fun deleteTopic(topic: RoadmapTopic)
+
+    @Query("DELETE FROM roadmap_topics")
+    suspend fun deleteAllTopics()
+
+    // --- Roadmap Subtopic Queries ---
+    @Query("SELECT * FROM roadmap_subtopics ORDER BY orderIndex ASC")
+    fun getAllSubtopicsFlow(): Flow<List<RoadmapSubtopic>>
+
+    @Query("SELECT * FROM roadmap_subtopics WHERE parentTopicId = :parentTopicId ORDER BY orderIndex ASC")
+    fun getSubtopicsByTopicFlow(parentTopicId: Int): Flow<List<RoadmapSubtopic>>
+
+    @Query("SELECT * FROM roadmap_subtopics WHERE parentTopicId = :parentTopicId ORDER BY orderIndex ASC")
+    suspend fun getSubtopicsByTopicDirect(parentTopicId: Int): List<RoadmapSubtopic>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubtopic(subtopic: RoadmapSubtopic)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubtopics(subtopics: List<RoadmapSubtopic>)
+
+    @Update
+    suspend fun updateSubtopic(subtopic: RoadmapSubtopic)
+
+    @Delete
+    suspend fun deleteSubtopic(subtopic: RoadmapSubtopic)
+
+    @Query("DELETE FROM roadmap_subtopics WHERE parentTopicId = :parentTopicId")
+    suspend fun deleteSubtopicsByTopic(parentTopicId: Int)
+
+    @Query("DELETE FROM roadmap_subtopics")
+    suspend fun deleteAllSubtopics()
 }

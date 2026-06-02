@@ -14,6 +14,9 @@ import com.example.data.entity.NewsBookmark
 import com.example.data.entity.PortfolioHolding
 import com.example.data.entity.CareerGoalFund
 import com.example.data.entity.SavedResource
+import com.example.data.entity.AiConversation
+import com.example.data.entity.RoadmapTopic
+import com.example.data.entity.RoadmapSubtopic
 
 @Database(
     entities = [
@@ -25,9 +28,12 @@ import com.example.data.entity.SavedResource
         NewsBookmark::class,
         PortfolioHolding::class,
         CareerGoalFund::class,
-        SavedResource::class
+        SavedResource::class,
+        AiConversation::class,
+        RoadmapTopic::class,
+        RoadmapSubtopic::class
     ],
-    version = 9,
+    version = 13,
     exportSchema = false
 )
 abstract class JeevanDatabase : RoomDatabase() {

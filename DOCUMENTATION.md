@@ -282,12 +282,20 @@ Tracks ledger registers, manages stock purchase indices, and analyzes savings pr
 ---
 
 ### HUB 3: CAREER (DevOps & SRE Roadmap)
-A structured 28-week curriculum containing training pathways, flashcards, diagnostic interview checks, and a sandbox for YAML schema files.
+A structured, week-based curriculum designed to prepare engineers for professional DevOps and SRE roles. Following the complete rollback of experimental navigation frameworks, the module preserves its classic, stable, and highly ergonomic week-by-week structure.
 
-#### Training Sections:
-* **Roadmap sub-tab**: Detailed layout of 28 weeks of SRE knowledge (Linux administration, containerization, ECS, Kubernetes, Ansible, CloudFormation, Datadog tracking).
-* **Assessment Arena sub-tab**: Offers multi-scenario diagnostic checks. Select a topic and use the "AI Suggest" dynamic buttons to complete simulated interviews.
-* **Diagnostics tab**: A place to inspect overall unit achievements.
+#### Stable Core Architecture:
+1. **Original 28-Week Roadmap Structure**:
+   - Covers 28 sequential weeks of core SRE knowledge, including Linux administration, scripting, Docker containerization, ECS development, Kubernetes clusters, Ansible configuration management, Infrastructure as Code (CloudFormation & Terraform), and Datadog/Prometheus monitoring.
+   - Dynamic tracker supporting **196 total tasks** (7 structured subtopic tasks per week) mapped sequentially to each calendar day of the week.
+2. **Stable Week-Based Navigation**:
+   - Quick navigation uses a straightforward week selector alongside day-by-day task selectors in the **DAILY STUDY** workspace, avoiding complex multi-hierarchical topic-first structures.
+3. **Daily Task Mapping & Completion Tracking**:
+   - Seamlessly integrated with local SQLite via Room. Daily checkboxes, dynamic progress calculations, and percentage complete indicators update instantly as users work through their roadmap.
+4. **Assessment Arena**:
+   - Interactive diagnostic assessment blocks with contextual scenario questions, supported by real-time "AI Suggest" companion validations and direct interview coaching.
+5. **Revision & Completion Flow**:
+   - Historized retention widgets showing completed study cards, saved resources, and active micro-notes per subtopic for persistent exam readiness.
 
 ---
 

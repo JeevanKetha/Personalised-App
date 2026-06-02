@@ -11,6 +11,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.database.JeevanDatabase
 import com.example.data.entity.*
 import com.example.data.repository.JeevanRepository
+import com.example.data.repository.SyncResult
+import com.example.data.repository.EnvironmentRepository
+import com.example.data.weather.*
+import com.example.data.HealthConnectManager
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.WorkManager
+import com.example.service.HealthSyncWorker
 import com.example.network.GeminiNetworkClient
 import com.example.service.TimerService
 import kotlinx.coroutines.Job
@@ -24,6 +32,7 @@ import java.util.*
 class JeevanViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: JeevanRepository
+    val environmentRepository = EnvironmentRepository(application)
     
     // --- Room flow states ---
     val transactions: StateFlow<List<Transaction>>
@@ -35,6 +44,29 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     val portfolioHoldings: StateFlow<List<PortfolioHolding>>
     val careerGoalFunds: StateFlow<List<CareerGoalFund>>
     val savedResources: StateFlow<List<SavedResource>>
+    val roadmapTopics: StateFlow<List<RoadmapTopic>>
+    val roadmapSubtopics: StateFlow<List<RoadmapSubtopic>>
+
+    // --- Health Connect & Synchronization States (Phase 2A) ---
+    val healthConnectManager = HealthConnectManager(application)
+    
+    private val _healthConnectAvailable = MutableStateFlow(false)
+    val healthConnectAvailable: StateFlow<Boolean> = _healthConnectAvailable
+
+    private val _healthSyncStatus = MutableStateFlow("IDLE")
+    val healthSyncStatus: StateFlow<String> = _healthSyncStatus
+
+    private val _lastSyncTime = MutableStateFlow(0L)
+    val lastSyncTime: StateFlow<Long> = _lastSyncTime
+
+    private val _permissionState = MutableStateFlow(false)
+    val permissionState: StateFlow<Boolean> = _permissionState
+
+    private val _isWorkerRegistered = MutableStateFlow(false)
+    val isWorkerRegistered: StateFlow<Boolean> = _isWorkerRegistered
+
+    private val _roomLogCount = MutableStateFlow(0)
+    val roomLogCount: StateFlow<Int> = _roomLogCount
 
     // --- UI Interactive States ---
     private val _isBrainThinking = MutableStateFlow(false)
@@ -451,7 +483,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 Do not include extra explanations outside this delimiter.
             """.trimIndent()
 
-            val rawKey = com.example.BuildConfig.GEMINI_API_KEY
+            val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
             val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
 
             var evaluationText = ""
@@ -815,6 +847,23 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         savedResources = repository.allSavedResources
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+        roadmapTopics = repository.allRoadmapTopics
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        roadmapSubtopics = repository.allRoadmapSubtopics
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        viewModelScope.launch {
+            com.example.data.RoadmapSeeder.seedIfNeeded(repository)
+        }
+
+        // Initialize Health Connect & Synchronization foundations (Phase 2A)
+        val healthPrefs = application.getSharedPreferences("jeevan_health_sync", Context.MODE_PRIVATE)
+        _lastSyncTime.value = healthPrefs.getLong("last_sync_time", 0L)
+        checkHealthConnectStatus()
+        registerPeriodicHealthSync()
+        refreshRoomLogCount()
+
         // Sync with TimerService background state
         val sharedPrefs = application.getSharedPreferences("jeevan_focus_timer", Context.MODE_PRIVATE)
         val savedDuration = sharedPrefs.getInt("custom_duration_minutes", 25)
@@ -927,6 +976,12 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 delay(30000)
             }
         }
+
+        // Active chat context initialization loading of historical messages on app startup
+        viewModelScope.launch {
+            loadMessagesForAgent("GENERAL")
+        }
+
 
         // Automatic weather and seasonal adaptivity context refresh every 2 hours
         viewModelScope.launch {
@@ -1149,6 +1204,92 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // --- ROADMAP CRUD ENGINE ---
+    fun addTopic(title: String, weekNumber: Int, description: String, iconName: String = "Linux") {
+        viewModelScope.launch {
+            val currentTopics = roadmapTopics.value
+            val nextIndex = (currentTopics.maxOfOrNull { it.orderIndex } ?: 0) + 1
+            val topic = RoadmapTopic(
+                title = title,
+                weekNumber = weekNumber,
+                description = description,
+                iconName = iconName,
+                orderIndex = nextIndex
+            )
+            repository.insertRoadmapTopic(topic)
+        }
+    }
+
+    fun editTopic(id: Int, title: String, weekNumber: Int, description: String, iconName: String = "Linux", orderIndex: Int) {
+        viewModelScope.launch {
+            val topic = RoadmapTopic(
+                id = id,
+                title = title,
+                weekNumber = weekNumber,
+                description = description,
+                iconName = iconName,
+                orderIndex = orderIndex
+            )
+            repository.updateRoadmapTopic(topic)
+        }
+    }
+
+    fun deleteTopic(topic: RoadmapTopic) {
+        viewModelScope.launch {
+            repository.deleteRoadmapTopic(topic)
+        }
+    }
+
+    fun reorderTopics(topics: List<RoadmapTopic>) {
+        viewModelScope.launch {
+            val updated = topics.mapIndexed { index, t ->
+                t.copy(orderIndex = index + 1)
+            }
+            repository.insertRoadmapTopics(updated)
+        }
+    }
+
+    fun addSubtopic(parentTopicId: Int, title: String, resourceUrl: String = "", estimatedHours: Double = 2.0) {
+        viewModelScope.launch {
+            val list = repository.getSubtopicsByTopicDirect(parentTopicId)
+            val nextIdx = (list.maxOfOrNull { it.orderIndex } ?: 0) + 1
+            val subtopic = RoadmapSubtopic(
+                parentTopicId = parentTopicId,
+                title = title,
+                resourceUrl = resourceUrl,
+                estimatedHours = estimatedHours,
+                orderIndex = nextIdx
+            )
+            repository.insertRoadmapSubtopic(subtopic)
+        }
+    }
+
+    fun editSubtopic(id: Int, parentTopicId: Int, title: String, resourceUrl: String = "", estimatedHours: Double = 2.0, orderIndex: Int) {
+        viewModelScope.launch {
+            val subtopic = RoadmapSubtopic(
+                id = id,
+                parentTopicId = parentTopicId,
+                title = title,
+                resourceUrl = resourceUrl,
+                estimatedHours = estimatedHours,
+                orderIndex = orderIndex
+            )
+            repository.updateRoadmapSubtopic(subtopic)
+        }
+    }
+
+    fun deleteSubtopic(subtopic: RoadmapSubtopic) {
+        viewModelScope.launch {
+            repository.deleteRoadmapSubtopic(subtopic)
+        }
+    }
+
+    fun resetRoadmap() {
+        viewModelScope.launch {
+            com.example.data.RoadmapSeeder.seedDefaultRoadmap(repository)
+        }
+    }
+
     // --- BIOMETRIC & ERGONOMIC HEALTH INTEGRITY ---
     fun updateBiometrics(weight: Double, height: Double) {
         viewModelScope.launch {
@@ -1161,25 +1302,41 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // State flows for AI Health Coach (Phase 2B)
+    private val _aiCoachAdvice = MutableStateFlow<String>("SRE Biometric Lifestyle Engine Online. Click the 'Generate Live Advisory' button below to synthesize your vitals.")
+    val aiCoachAdvice: StateFlow<String> = _aiCoachAdvice
+
+    private val _isCoachGenerating = MutableStateFlow<Boolean>(false)
+    val isCoachGenerating: StateFlow<Boolean> = _isCoachGenerating
+
     fun triggerAdaptiveWorkoutPlan(weight: Double, height: Double, bmi: Double) {
         viewModelScope.launch {
-            val rawKey = com.example.BuildConfig.GEMINI_API_KEY
+            val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
             val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
             
             val todayLogs = healthLogs.value.firstOrNull()
             val calConsumed = todayLogs?.caloriesConsumed ?: 1800
             val calBurned = todayLogs?.caloriesBurned ?: 300
+            val sleepMin = todayLogs?.sleepMinutes ?: 480
+            val stepsVal = todayLogs?.stepsCount ?: 5000
+            val recScore = todayLogs?.recoveryScore ?: 75
+            
+            // Calculate a temporary nutrition alignment indicator
+            val nutritionScore = (100 - Math.abs(calConsumed - 2000) / 10).coerceIn(40, 100)
             
             val prompt = """
-                You are an SRE Fitness & Biometric Coach.
+                You are an elite SRE Fitness & Biometric Coach specializing in software developer health.
                 Given the user's statistics:
                 - Weight: $weight kg
                 - Height: $height cm
                 - BMI: $bmi (Status: ${if(bmi < 18.5) "Underweight" else if(bmi < 25) "Normal weight" else "Overweight"})
-                - Daily Calories Logged: Consumed $calConsumed kcal, Burned $calBurned kcal.
+                - Daily Sleep: ${sleepMin / 60} hours
+                - Daily Steps: $stepsVal
+                - Current Recovery Score: $recScore%
+                - Nutrition Align: $nutritionScore/100 (Consumed $calConsumed kcal, Burned $calBurned kcal)
                 
                 Generate a dynamic, personalized office workout plan for this desk-bound DevOps engineer.
-                It must adapt to their weight, height, BMI, nutrition, and calorie balance.
+                It must adapt specifically to their weight, height, BMI, nutrition score, step fatigue, and sleep recovery rate.
                 Output exactly 4 relevant physical exercises/activities (each with sets/reps or duration and a brief explanation).
                 Format your output as a RAW JSON array of exactly 4 strings without any markdown or extra description. Example:
                 ["Squats: 3 sets x 15 reps (adapted for high BMI stability)", "Pushups: 3 sets x 10 reps", "Desk wrist stretches: 5 mins", "Brisk corridor walk: 15 mins"]
@@ -1208,28 +1365,166 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             
-            // Offline fallback adaptive system based on BMI
+            // Offline fallback adaptive system based on multi-factor telemetry inputs
             val workouts = when {
+                recScore < 55 -> listOf(
+                    "Restorative Stretch: Active desk posture neck & shoulder decomp - 10 mins (Recovery: $recScore% - Posture support priority)",
+                    "Lumbar Relief: Seated lateral side bends - 5 mins (Low intensity stretch)",
+                    "Respiratory Control: Diaphragmatic box breathing - 5 mins (System reset)",
+                    "Leisurely Walk: Slow office corridor stroll - 10 mins (Preventing muscular stress with low recovery)"
+                )
+                sleepMin < 360 -> listOf(
+                    "Fatigue Shield: Seated hamstring and lower back stretch - 10 mins (Restoration focus to offset lack of sleep)",
+                    "Mild Mobility: Desk wrist twists & finger splay - 5 mins (No fatigue accumulation)",
+                    "Postural Reset: Chest opener wall stretch - 3 sets x 30s (Gentle tension release)",
+                    "Calm Pacing: Slow corridor stride - 10 mins (Low effort conditioning)"
+                )
+                stepsVal > 10000 -> listOf(
+                    "Joint Decompression: Ankle rolls & calf extensions - 10 mins (Active load recovery for high steps of $stepsVal)",
+                    "SRE Posture: Desk arm chest stretches - 5 mins (Alleviates keyboard shoulder compression)",
+                    "Active Rest: Wall lean spinal rolls - 5 mins",
+                    "Mobility Focus: Seated IT band stretches - 5 mins"
+                )
                 bmi < 18.5 -> listOf(
-                    "Strength Building: Slow Bodyweight Squats - 3 sets x 10 reps (Resistance training for building muscular mass with user weight $weight kg)",
-                    "Resistance Training: Wall Pushups - 3 sets x 12 reps (Low intensity loading adapted for height $height cm)",
-                    "Strength Building: Desk Plank Holds - 3 sets x 30s (Sustained core strength building)",
-                    "Resistance Training: Static Lunge Hold - 3 sets x 15s per side (Targeted lower body resistance)"
+                    "Strength Building: Controlled bench squats using heavy office chair - 3 sets x 12 reps (Mass builder adapted for low BMI $bmi)",
+                    "Resistance Focus: Wall pushups with deep slow negatives - 3 sets x 10 reps (Upper body loading)",
+                    "Anabolic Stimulus: Incline desk planks - 3 sets x 30s (Core foundation)",
+                    "Corridor Stride: High intensity fast corridor walk - 5 mins (Fast twitch fiber stimulation)"
                 )
                 bmi >= 25.0 -> listOf(
-                    "Walking: Brisk Office Corridor Walk - 20 mins (Low-impact, cardiorespiratory burn optimized for BMI $bmi)",
-                    "Mobility Work: Desk Decompression Stretches - 10 mins (Relieves lower spine stress for weight $weight kg)",
-                    "Light Cardio: Dynamic Shoulder & Arm Rolls - 5 mins (Aerobic endurance mobility focus)",
-                    "Mobility Work: Seated Torso Twists - 5 mins (Spreading tension relief across joints)"
+                    "Cardio Stride: Active brisk office walking - 20 mins (Aerobic target zone adjusted for weight $weight kg)",
+                    "Safe Loading: Standing wall-sits - 3 sets x 30s (Joint-safe knee stabilization)",
+                    "Mobility Relief: Glute stretches on office chair - 10 mins (Alleviating lower lumbar drag)",
+                    "Core Vitality: Seated cat-camel spinal articulation - 5 mins (Restores desk bound flexibility)"
                 )
                 else -> listOf(
-                    "Strength Exercises: Standard Desk Pushups - 3 sets x 15 reps (Core stability & shoulder relief)",
-                    "Pushups: Floor Pushups or Plank Holds - 3 sets x 12 reps / 45s (Optimized for normal weight)",
-                    "Squats: Bodyweight Deep Squats - 3 sets x 15 reps (Leg power Booster and mobility)",
-                    "Strength Exercises: Tricep Desk Dips - 3 sets x 10 reps (Bench load for upper body tone)"
+                    "Anabolic Build: Floor pushups or deep holds - 3 sets x 15 reps (Optimal status recovery $recScore%)",
+                    "Core Posture: Desk mountain climbers - 3 sets x 20 reps (Metabolic booster)",
+                    "Lower Kinetic: Bodyweight deep squats - 3 sets x 20 reps (Enhancing circulation)",
+                    "Stair Climb: Stair or corridor rapid stride - 12 mins (Aerobic capacity upgrade)"
                 )
             }
             _adaptiveWorkouts.value = workouts
+        }
+    }
+
+    fun generateAICoachSession() {
+        _isCoachGenerating.value = true
+        viewModelScope.launch {
+            try {
+                val prof = repository.getOrInitUserProfile()
+                val today = healthLogs.value.firstOrNull() ?: HealthLog(dateString = getTodayDateString())
+                
+                val weight = prof.weightKg
+                val height = prof.heightCm
+                val bmi = prof.computedBmi
+                
+                val sleep = today.sleepMinutes
+                val steps = today.stepsCount
+                val averageHR = today.averageHeartRate
+                val calories = today.caloriesConsumed
+                val burned = today.caloriesBurned
+                val water = today.waterIntakeMl
+                val recoveryScore = today.recoveryScore
+                
+                val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
+                val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
+                
+                if (!isDefaultKey) {
+                    val prompt = """
+                        You are Jeevan SRE Health Coach, an elite biometric, ergonomic posture, and sports medicine advisor designed specifically for desk-bound software engineers.
+                        Given the user's latest lifestyle telemetry stats:
+                        - Weight: $weight kg, Height: $height cm, BMI: $bmi
+                        - Current Recovery Score: $recoveryScore%
+                        - Today's Steps: $steps (Goal: ${prof.dailyStepGoal})
+                        - Today's Sleep: ${sleep / 60}h ${sleep % 60}m
+                        - Core Calories Consumed: $calories kcal, Calories Burned: $burned kcal
+                        - Hydration Level: $water ml
+                        - Average Active HR: $averageHR bpm
+                        
+                        Synthesize these parameters and generate a highly technical, customized, action-oriented SRE coach assessment.
+                        Maintain an objective, technical tone. Structure the feedback clearly (e.g., [SYSTEM READY FOR DEPLOYMENT] or [DEGRADED POSTURE DISASTER RECOVERY]).
+                        Do not use markdown bold symbols excessively, focus on clear spacing and professional terminology. Give 3 clear bulleted steps to restore or optimize operational readiness.
+                    """.trimIndent()
+                    
+                    try {
+                        val requestBody = com.example.network.GeminiRequest(
+                            contents = listOf(
+                                com.example.network.GeminiContent(
+                                    parts = listOf(
+                                        com.example.network.GeminiPart(text = prompt)
+                                    )
+                                )
+                            )
+                        )
+                        val response = com.example.network.GeminiNetworkClient.apiService.generateContent(rawKey, requestBody)
+                        val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: ""
+                        if (text.isNotBlank()) {
+                            _aiCoachAdvice.value = text
+                            _isCoachGenerating.value = false
+                            return@launch
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("JeevanViewModel", "AI Coach generator via Gemini failed, falling back", e)
+                    }
+                }
+                
+                // Fallback rule-based SRE Coach engine
+                val bmiCategory = when {
+                    bmi < 18.5 -> "Underweight"
+                    bmi < 25.0 -> "Ideal Range"
+                    else -> "Overweight / High Density"
+                }
+                
+                val readinessStatus = when {
+                    recoveryScore >= 80 -> "🟢 SYSTEM READY - HIGH OPERATIONAL STABILITY"
+                    recoveryScore >= 60 -> "🟡 WARN STATE - DEGRADED BIO-STABILITY"
+                    else -> "🔴 CRITICAL DISASTER ALERT - SEVERE BIOMETRIC FATIGUE"
+                }
+                
+                val diagnosis = StringBuilder()
+                diagnosis.append("=========================================\n")
+                diagnosis.append(" JEEVAN SRE HEALTH COACH DIAGNOSTIC\n")
+                diagnosis.append(" Status: $readinessStatus\n")
+                diagnosis.append("=========================================\n\n")
+                
+                diagnosis.append("Telemetry Summary: \n")
+                diagnosis.append("• Biometrics: BMI is $bmi ($bmiCategory)\n")
+                diagnosis.append("• Active Recovery Index: $recoveryScore%\n")
+                diagnosis.append("• Today's Sleep: ${sleep / 60}h ${sleep % 60}m\n")
+                diagnosis.append("• Hydration: $water ml / ${prof.dailyWaterGoalMl} ml\n")
+                diagnosis.append("• Steps Count: $steps steps worked\n\n")
+                
+                diagnosis.append("Core SRE Advisory Recommendations:\n")
+                when {
+                    recoveryScore < 60 -> {
+                        diagnosis.append("1. DISASTER RECOVERY LOCKDOWN triggered. Your recovery score is critical at $recoveryScore%. Immediately cease heavy cognitive or physical tasks.\n")
+                        diagnosis.append("2. HYDRATION THROTTLING: Boost your water intake to clear lactic waste. Target 1000ml in the next 2 hours.\n")
+                        diagnosis.append("3. DECOMPRESSION: Hold standard wall-sit stretching or lumbar rolls to secure lower spine posture.\n")
+                    }
+                    sleep < 360 -> {
+                        diagnosis.append("1. SLEEP LATENCY DEGRADATION observed. Insufficient deep restoration waves detected.\n")
+                        diagnosis.append("2. ERGONOMIC WORKOUT STABILIZER: Execute low-impact office stretches (Seated twists) and avoid overexertion.\n")
+                        diagnosis.append("3. METABOLIC RESET: Incorporate prebiotic fibers like raw cucumbers or curd from Indian foods database to stabilize gut flora.\n")
+                    }
+                    steps < 3000 -> {
+                        diagnosis.append("1. POSTURAL HYPOKINESIA WARN STATE. Your step count of $steps steps is causing muscular pooling in your lower extremities.\n")
+                        diagnosis.append("2. CARDIO INTERRUPT ROUTINE: Initiate a 10-minute active staircase walk to cycle systemic oxygen levels.\n")
+                        diagnosis.append("3. MOISTURE RESTORE: Drink water to match seasonal weather indicators.\n")
+                    }
+                    else -> {
+                        diagnosis.append("1. BALANCED STEADY STATE maintained. Physical metrics are operating within high tolerance thresholds.\n")
+                        diagnosis.append("2. ANABOLIC LOAD OPPORTUNITY: Complete the standard desk squats and level up core posture.\n")
+                        diagnosis.append("3. SEASONAL NOURISHMENT: Consume fresh inputs optimized for local weather index.\n")
+                    }
+                }
+                
+                _aiCoachAdvice.value = diagnosis.toString()
+            } catch (e: Exception) {
+                _aiCoachAdvice.value = "Fallback Coach Exception: ${e.message}"
+            } finally {
+                _isCoachGenerating.value = false
+            }
         }
     }
 
@@ -1268,7 +1563,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
 
     fun generateQuarterlyHealthReport() {
         viewModelScope.launch {
-            val rawKey = com.example.BuildConfig.GEMINI_API_KEY
+            val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
             val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
             
             val prof = repository.getOrInitUserProfile()
@@ -1334,7 +1629,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     // --- PERSONALIZED PORTFOLIO NEWS ---
     fun refreshPortfolioNews() {
         viewModelScope.launch {
-            val rawKey = com.example.BuildConfig.GEMINI_API_KEY
+            val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
             val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
             
             val now = System.currentTimeMillis()
@@ -1747,7 +2042,21 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         _chatMessages.value = _chatMessages.value + userMsg
         _isBrainThinking.value = true
 
+        val currentAgent = activeAgentType.value
+
         viewModelScope.launch {
+            // Save user message to database
+            val userConv = com.example.data.entity.AiConversation(
+                agentType = currentAgent,
+                role = "user",
+                content = text,
+                timestamp = System.currentTimeMillis()
+            )
+            repository.insertMessage(userConv)
+
+            // Get recent history of previous 10 messages from DB (reversed to keep chronological order)
+            val history = repository.getRecentConversations(currentAgent, limit = 10).reversed()
+
             // Build Context Memory from Database entries
             val profile = userProfile.value
             val txsList = transactions.value
@@ -1781,14 +2090,20 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 Completed DevOps Subtopics: $completedSubtopicsCount of $totalSubtopicsCount
             """.trimIndent()
 
-            // Run Gemini REST query
-            val responseText = GeminiNetworkClient.queryJeevanEngine(text, userMemoryContext)
+            // Run Gemini REST query, passing history
+            val responseText = GeminiNetworkClient.queryJeevanEngine(text, userMemoryContext, history)
             
-            _chatMessages.value = _chatMessages.value + ChatMessage(
-                sender = "Jeevan",
-                text = responseText,
+            // Save model response to database
+            val modelConv = com.example.data.entity.AiConversation(
+                agentType = currentAgent,
+                role = "model",
+                content = responseText,
                 timestamp = System.currentTimeMillis()
             )
+            repository.insertMessage(modelConv)
+
+            // Reload messages to display
+            loadMessagesForAgent(currentAgent)
             _isBrainThinking.value = false
         }
     }
@@ -1906,7 +2221,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         "Seasonal dehydration danger coefficient: $hydrationDehydrationCoef%. Increase target water intake to ${waterGoal}ml."
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), "Loading seasonal adaptation intelligence...")
 
-    fun refreshWeather() {
+    fun refreshWeather(force: Boolean = false) {
         val context = getApplication<Application>()
         _weatherState.value = "LOADING"
         viewModelScope.launch {
@@ -1917,62 +2232,68 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                     val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
                     fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
                         if (loc != null) {
-                            fetchWeatherForCoordinates(loc.latitude, loc.longitude)
+                            fetchWeatherForCoordinates(loc.latitude, loc.longitude, force)
                         } else {
-                            _weatherLocationName.value = "Hyderabad, Telangana"
-                            fetchWeatherForCoordinates(17.3850, 78.4867) // Hyderabad GPS fallback
+                            val lat = environmentRepository.getCachedLat()
+                            val lon = environmentRepository.getCachedLon()
+                            fetchWeatherForCoordinates(lat, lon, force)
                         }
                     }.addOnFailureListener {
-                        _weatherLocationName.value = "Hyderabad, Telangana"
-                        fetchWeatherForCoordinates(17.3850, 78.4867)
+                        val lat = environmentRepository.getCachedLat()
+                        val lon = environmentRepository.getCachedLon()
+                        fetchWeatherForCoordinates(lat, lon, force)
                     }
                 } else {
                     _weatherLocationName.value = "Loc Off"
                     _weatherState.value = "PERMISSION_REQUIRED"
                 }
             } catch (e: Exception) {
-                _weatherLocationName.value = "Hyderabad, Telangana"
-                fetchWeatherForCoordinates(17.3850, 78.4867)
+                val lat = environmentRepository.getCachedLat()
+                val lon = environmentRepository.getCachedLon()
+                fetchWeatherForCoordinates(lat, lon, force)
             }
         }
     }
 
-    private fun fetchWeatherForCoordinates(lat: Double, lon: Double) {
+    private fun fetchWeatherForCoordinates(lat: Double, lon: Double, force: Boolean = false) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val context = getApplication<Application>()
-                try {
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    val addresses = geocoder.getFromLocation(lat, lon, 1)
-                    if (!addresses.isNullOrEmpty()) {
-                        val addr = addresses[0]
-                        val city = addr.locality ?: addr.subAdminArea ?: "Hyderabad"
-                        val state = addr.adminArea ?: "Telangana"
-                        _weatherLocationName.value = "$city, $state"
-                    } else {
-                        _weatherLocationName.value = "Grid ${String.format("%.2f", lat)},${String.format("%.2f", lon)}"
+                var resolvedLocName = environmentRepository.getCachedLocationName()
+                val distSq = (lat - environmentRepository.getCachedLat()) * (lat - environmentRepository.getCachedLat()) +
+                             (lon - environmentRepository.getCachedLon()) * (lon - environmentRepository.getCachedLon())
+                
+                if (distSq > 0.01 || resolvedLocName == "Locating..." || resolvedLocName == "Hyderabad, Telangana" || resolvedLocName == "Loc Off") {
+                    try {
+                        val geocoder = Geocoder(context, Locale.getDefault())
+                        val addresses = geocoder.getFromLocation(lat, lon, 1)
+                        if (!addresses.isNullOrEmpty()) {
+                            val addr = addresses[0]
+                            val city = addr.locality ?: addr.subAdminArea ?: "Hyderabad"
+                            val state = addr.adminArea ?: "Telangana"
+                            resolvedLocName = "$city, $state"
+                        } else {
+                            resolvedLocName = "Grid ${String.format("%.2f", lat)},${String.format("%.2f", lon)}"
+                        }
+                    } catch (e: Exception) {
+                        resolvedLocName = "Grid ${String.format("%.2f", lat)},${String.format("%.2f", lon)}"
                     }
-                } catch (e: Exception) {
-                    _weatherLocationName.value = "Grid ${String.format("%.2f", lat)},${String.format("%.2f", lon)}"
                 }
 
-                val urlString = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true"
-                val conn = java.net.URL(urlString).openConnection() as java.net.HttpURLConnection
-                conn.requestMethod = "GET"
-                conn.connectTimeout = 5000
-                conn.readTimeout = 5000
-                val responseStr = conn.inputStream.bufferedReader().use { it.readText() }
+                val success = if (force) {
+                    val pSuccess = environmentRepository.getProvider().fetchWeather(lat, lon)
+                    if (pSuccess) {
+                        environmentRepository.setLocationName(resolvedLocName)
+                        true
+                    } else false
+                } else {
+                    environmentRepository.refreshIfNeeded(lat, lon, resolvedLocName)
+                }
 
-                val tempRegex = """(?i)"temperature"\s*:\s*([0-9.-]+)""".toRegex()
-                val match = tempRegex.find(responseStr)
-                if (match != null) {
-                    val tempVal = match.groupValues[1].toDoubleOrNull()
-                    if (tempVal != null) {
-                        _weatherTemp.value = tempVal
-                        _weatherState.value = "SUCCESS"
-                    } else {
-                        _weatherState.value = "ERROR"
-                    }
+                if (success) {
+                    _weatherTemp.value = environmentRepository.getProvider().getTemperature()
+                    _weatherLocationName.value = environmentRepository.getCachedLocationName()
+                    _weatherState.value = "SUCCESS"
                 } else {
                     _weatherState.value = "ERROR"
                 }
@@ -1980,6 +2301,11 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 _weatherState.value = "ERROR"
             }
         }
+    }
+
+    fun selectWeatherProvider(providerType: String) {
+        environmentRepository.setProvider(providerType)
+        refreshWeather(force = true)
     }
 
     fun updateAIInvestmentInsights() {
@@ -2105,7 +2431,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     // --- DYNAMIC CORE SRE ENGINES ---
     fun generateDynamicAssessmentQuestions(subtopicId: String) {
         viewModelScope.launch {
-            val rawKey = com.example.BuildConfig.GEMINI_API_KEY
+            val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
             val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
             
             if (!isDefaultKey) {
@@ -2213,7 +2539,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         _isNewsRefreshing.value = true
         
         viewModelScope.launch {
-            val rawKey = com.example.BuildConfig.GEMINI_API_KEY
+            val rawKey = com.example.data.SecurePrefsManager.getGeminiApiKey() ?: ""
             val isDefaultKey = rawKey.isBlank() || rawKey == "MY_GEMINI_API_KEY" || rawKey == "API_KEY"
             
             if (!isDefaultKey) {
@@ -2455,6 +2781,119 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         TimerService.clearCallbacks()
         super.onCleared()
+    }
+
+    // --- AI AGENT MULTI-CHAT MEMORY STATE ---
+    val activeAgentType = MutableStateFlow("GENERAL")
+
+    suspend fun loadMessagesForAgent(agentType: String) {
+        val history = repository.getRecentConversations(agentType, limit = 10)
+        if (history.isEmpty()) {
+            val initialGreetingText = when (agentType) {
+                "FINANCE" -> "Welcome to the Wealth Intel Hub, Commander. I have synchronized your local assets, mutual funds, and daily expenses. Ask me to audit your allocations!"
+                "HEALTH" -> "Ergonomic Health diagnostics loaded, Commander. Hydration levels and posture metrics are online. Standing by to optimize your physical wellness indicators."
+                "CAREER" -> "Cloud DevOps Architect online, Commander. Your SRE study metrics and weakness maps are loaded. Ready to troubleshoot systems or review technical concepts."
+                else -> "Welcome, Commander. System check: Wallet capital registers stable, study tracks are updated, and health variables compiled. I am ready to route your query."
+            }
+            _chatMessages.value = listOf(
+                ChatMessage(
+                    sender = "Jeevan",
+                    text = initialGreetingText,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+        } else {
+            val chatMsgs = history.reversed().map {
+                ChatMessage(
+                    sender = if (it.role.lowercase() == "user") "You" else "Jeevan",
+                    text = it.content,
+                    timestamp = it.timestamp
+                )
+            }
+            _chatMessages.value = chatMsgs
+        }
+    }
+
+    fun setActiveAgentType(type: String) {
+        activeAgentType.value = type
+        viewModelScope.launch {
+            loadMessagesForAgent(type)
+        }
+    }
+
+    fun clearMemory(agentType: String) {
+        viewModelScope.launch {
+            repository.clearConversations(agentType)
+            loadMessagesForAgent(agentType)
+        }
+    }
+
+    // --- Health Sync Methods (Phase 2A) ---
+    fun checkHealthConnectStatus() {
+        viewModelScope.launch {
+            val status = healthConnectManager.checkInstallStatus()
+            _healthConnectAvailable.value = status == HealthConnectManager.InstallStatus.INSTALLED
+            _permissionState.value = healthConnectManager.checkPermissionsGranted()
+            refreshRoomLogCount()
+        }
+    }
+
+    fun refreshRoomLogCount() {
+        viewModelScope.launch {
+            try {
+                repository.allHealthLogs.firstOrNull()?.let {
+                    _roomLogCount.value = it.size
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    fun syncHealthData() {
+        if (_healthSyncStatus.value == "SYNCING") return
+        _healthSyncStatus.value = "SYNCING"
+        viewModelScope.launch {
+            try {
+                val result = repository.syncHealthFromConnect(healthConnectManager)
+                val statusStr = when (result) {
+                    SyncResult.SUCCESS -> {
+                        val now = System.currentTimeMillis()
+                        _lastSyncTime.value = now
+                        getApplication<Application>().getSharedPreferences("jeevan_health_sync", Context.MODE_PRIVATE)
+                            .edit().putLong("last_sync_time", now).apply()
+                        "SUCCESS"
+                    }
+                    SyncResult.PERMISSION_REQUIRED -> "PERMISSION_REQUIRED"
+                    SyncResult.UNAVAILABLE -> "UNAVAILABLE"
+                    SyncResult.ERROR -> "ERROR"
+                }
+                _healthSyncStatus.value = statusStr
+                checkHealthConnectStatus()
+                refreshRoomLogCount()
+            } catch (e: Exception) {
+                _healthSyncStatus.value = "ERROR"
+            }
+        }
+    }
+
+    fun registerPeriodicHealthSync() {
+        try {
+            val workManager = WorkManager.getInstance(getApplication())
+            val syncRequest = PeriodicWorkRequestBuilder<HealthSyncWorker>(
+                2, java.util.concurrent.TimeUnit.HOURS
+            ).build()
+            
+            workManager.enqueueUniquePeriodicWork(
+                "HealthSyncPeriodic",
+                ExistingPeriodicWorkPolicy.KEEP,
+                syncRequest
+            )
+            _isWorkerRegistered.value = true
+        } catch (e: Exception) {
+            _isWorkerRegistered.value = false
+            android.util.Log.e("JeevanViewModel", "Failed to register HealthSyncWorker", e)
+        }
     }
 }
 

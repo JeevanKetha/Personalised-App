@@ -33,7 +33,12 @@ data class HealthLog(
     val sleepMinutes: Int = 0,
     val moodScore: Int = 3, // 1 (Awful) to 5 (Radiant)
     val journalEntry: String = "",
-    val stepsCount: Int = 0
+    val stepsCount: Int = 0,
+    val averageHeartRate: Int = 0,
+    val stepsSource: String = "Manual",
+    val sleepSource: String = "Manual",
+    val heartRateSource: String = "Manual",
+    val recoveryScore: Int = 0
 )
 
 @Entity(tableName = "user_settings")
@@ -48,7 +53,8 @@ data class UserProfile(
     val balanceAmount: Double = 20000.0,
     val weightKg: Double = 70.0,
     val heightCm: Double = 175.0,
-    val computedBmi: Double = 22.8
+    val computedBmi: Double = 22.8,
+    val seeded: Boolean = false
 )
 
 @Entity(tableName = "subtopic_progress")
@@ -104,4 +110,34 @@ data class SavedResource(
     val source: String = "",
     val dateAdded: String = "" // formatted date like "12-Jun-2026"
 )
+
+@Entity(tableName = "ai_conversations")
+data class AiConversation(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val agentType: String,      // "FINANCE" | "CAREER" | "HEALTH" | "GENERAL"
+    val role: String,           // "user" | "model"
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "roadmap_topics")
+data class RoadmapTopic(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val weekNumber: Int,
+    val description: String,
+    val iconName: String = "Linux",
+    val orderIndex: Int = 0
+)
+
+@Entity(tableName = "roadmap_subtopics")
+data class RoadmapSubtopic(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val parentTopicId: Int, // ID of RoadmapTopic
+    val title: String,
+    val resourceUrl: String = "",
+    val estimatedHours: Double = 2.0,
+    val orderIndex: Int = 0
+)
+
 

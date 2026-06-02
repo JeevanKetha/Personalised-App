@@ -98,10 +98,11 @@ class TimerService : Service() {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                @Suppress("WrongConstant")
                 startForeground(
                     NOTIFICATION_ID,
                     buildNotification("Focus session initialized. Remain in flow.", secondsRemaining),
-                    1073741824 // ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 )
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification("Focus session initialized. Remain in flow.", secondsRemaining))
