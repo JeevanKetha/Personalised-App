@@ -555,10 +555,20 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
                 _assessmentScoreResult.value = parsedScore
                 _assessmentStrengths.value = parsedStrengths
                 _assessmentWeaknesses.value = parsedWeaknesses
+
+                // Save completed subtopic assessment score to database so it persists
+                val roadmapSub = roadmapSubtopics.value.firstOrNull { "sub_${it.id}" == subId }
+                val pId = if (roadmapSub != null) "topic_${roadmapSub.parentTopicId}" else "topic_unknown"
+                repository.saveSubtopicProgress(subId, pId, true, null, parsedScore)
             } catch (e: Exception) {
                 _assessmentScoreResult.value = 80
                 _assessmentStrengths.value = "* Foundational command over subtopic parameters"
                 _assessmentWeaknesses.value = "* Ensure more architectural details are mentioned"
+                try {
+                    val roadmapSub = roadmapSubtopics.value.firstOrNull { "sub_${it.id}" == subId }
+                    val pId = if (roadmapSub != null) "topic_${roadmapSub.parentTopicId}" else "topic_unknown"
+                    repository.saveSubtopicProgress(subId, pId, true, null, 80)
+                } catch(innerEx: Exception) {}
             }
             
             _isAssessmentEvaluating.value = false

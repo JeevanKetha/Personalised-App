@@ -364,9 +364,9 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
 
         // Seed subtopics with expanded 28-week Ultimate SRE & DevOps roadmap
         val defaultSubtopics = listOf(
-            SubtopicProgress("week_1", "linux", true, System.currentTimeMillis(), null, 90),
+            SubtopicProgress("week_1", "linux", false, null, null, 0),
             SubtopicProgress("week_2", "linux", false, null, "Lack of Time", 0),
-            SubtopicProgress("week_3", "linux", true, System.currentTimeMillis(), null, 85),
+            SubtopicProgress("week_3", "linux", false, null, null, 0),
             SubtopicProgress("week_4", "python", false, null, "Busy SRE Workday", 0),
             SubtopicProgress("week_5", "aws", false, null, "Needs Prep", 0),
             SubtopicProgress("week_6", "aws", false, null, null, 0),
@@ -524,6 +524,7 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
     suspend fun clearAllRoadmapData() = withContext(Dispatchers.IO) {
         jeevanDao.deleteAllTopics()
         jeevanDao.deleteAllSubtopics()
+        jeevanDao.deleteAllSubtopicProgress()
     }
 
     // --- Roadmap Subtopics ---

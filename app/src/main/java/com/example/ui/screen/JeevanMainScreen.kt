@@ -463,8 +463,8 @@ fun DashboardHub(viewModel: JeevanViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val completeCount = subtopics.count { it.isCompleted }
-                val totalCount = subtopics.size.coerceAtLeast(1)
+                val completeCount = subtopics.count { it.isCompleted && it.subtopicId.startsWith("sub_") }
+                val totalCount = 196
                 
                 Box(modifier = Modifier.weight(1f)) {
                     EcosystemIndicatorChip("WALLET CAPITAL", "₹${userProfile.balanceAmount}", CyberCyan)
@@ -3339,7 +3339,22 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                                         }
                                                     } else {
                                                         // Non edit mode actions: Start assessment/Toggle completeness
-                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                            // Status Badge
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(4.dp))
+                                                                    .background(if (isSubCompleted) CyberGreen.copy(alpha = 0.15f) else ImmersiveAmber.copy(alpha = 0.15f))
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = if (isSubCompleted) "COMPLETED" else "PENDING",
+                                                                    color = if (isSubCompleted) CyberGreen else ImmersiveAmber,
+                                                                    fontSize = 8.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    fontFamily = FontFamily.Monospace
+                                                                )
+                                                            }
                                                             Box(
                                                                 modifier = Modifier
                                                                     .clip(RoundedCornerShape(4.dp))
@@ -3356,7 +3371,7 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                                                             ) {
                                                                 Text(
-                                                                    text = if (isSubCompleted) "UNMARK COMPLETE" else "✓ STUDY DONE",
+                                                                    text = if (isSubCompleted) "UNMARK COMPLETED" else "MARK COMPLETED",
                                                                     color = if (isSubCompleted) ImmersiveRose else CyberGreen,
                                                                     fontSize = 8.sp,
                                                                     fontWeight = FontWeight.Bold,
@@ -3367,13 +3382,15 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                                             Box(
                                                                 modifier = Modifier
                                                                     .clip(RoundedCornerShape(4.dp))
-                                                                    .background(CyberCyan.copy(alpha = 0.15f))
-                                                                    .clickable {
-                                                                        viewModel.startAssessment(subProgressId)
+                                                                    .background(if (isSubCompleted) CyberCyan.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+                                                                    .clickable(enabled = isSubCompleted) {
+                                                                        if (isSubCompleted) {
+                                                                            viewModel.startAssessment(subProgressId)
+                                                                        }
                                                                     }
                                                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                                                             ) {
-                                                                Text("START ASSESSMENT", color = CyberCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                                                Text(text = if (isSubCompleted) "START ASSESSMENT" else "LOCKED", color = if (isSubCompleted) CyberCyan else TextMuted, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                                                             }
                                                         }
                                                     }
@@ -3649,17 +3666,17 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
                 // Learning Status Card
                 item {
-                    val statusText = getLearningStatus(subProgressObj)
+                    val statusText = getLearningStatus(subProgressObj, passingScore)
                     val score = subProgressObj?.assessmentScore ?: 0
                     
                     Card(
                         colors = CardDefaults.cardColors(containerColor = ImmersiveSurfaceVariant.copy(alpha = 0.7f)),
                         border = BorderStroke(1.dp, color = when(statusText) {
-                            "Pass", "Retained" -> CyberGreen.copy(alpha = 0.4f)
-                            "Average" -> CyberCyan.copy(alpha = 0.4f)
-                            "Needs Improvement", "Revision Due" -> ImmersiveRose.copy(alpha = 0.4f)
-                            "Assessment Pending", "Completed" -> ImmersiveAmber.copy(alpha = 0.4f)
-                            else -> Color.White.copy(alpha = 0.08f)
+                            "Passed", "Completed" -> CyberGreen.copy(alpha = 0.4f)
+                            "Average" -> ImmersiveAmber.copy(alpha = 0.4f)
+                            "Poor" -> ImmersiveRose.copy(alpha = 0.4f)
+                            "Assessment Pending" -> CyberCyan.copy(alpha = 0.4f)
+                            else -> ImmersiveAmber.copy(alpha = 0.4f)
                         }),
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     ) {
@@ -3675,11 +3692,11 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(
                                             when(statusText) {
-                                                "Pass", "Retained" -> CyberGreen.copy(alpha = 0.15f)
-                                                "Average" -> CyberCyan.copy(alpha = 0.15f)
-                                                "Needs Improvement", "Revision Due" -> ImmersiveRose.copy(alpha = 0.15f)
-                                                "Assessment Pending", "Completed" -> ImmersiveAmber.copy(alpha = 0.15f)
-                                                else -> Color.White.copy(alpha = 0.08f)
+                                                "Passed", "Completed" -> CyberGreen.copy(alpha = 0.15f)
+                                                "Average" -> ImmersiveAmber.copy(alpha = 0.15f)
+                                                "Poor" -> ImmersiveRose.copy(alpha = 0.15f)
+                                                "Assessment Pending" -> CyberCyan.copy(alpha = 0.15f)
+                                                else -> ImmersiveAmber.copy(alpha = 0.15f)
                                             }
                                         )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -3687,11 +3704,11 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                     Text(
                                         text = statusText.uppercase(),
                                         color = when(statusText) {
-                                            "Pass", "Retained" -> CyberGreen
-                                            "Average" -> CyberCyan
-                                            "Needs Improvement", "Revision Due" -> ImmersiveRose
-                                            "Assessment Pending", "Completed" -> ImmersiveAmber
-                                            else -> Color.White
+                                            "Passed", "Completed" -> CyberGreen
+                                            "Average" -> ImmersiveAmber
+                                            "Poor" -> ImmersiveRose
+                                            "Assessment Pending" -> CyberCyan
+                                            else -> ImmersiveAmber
                                         },
                                         fontSize = 9.sp,
                                         fontFamily = FontFamily.Monospace,
@@ -3706,14 +3723,14 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                 Icon(
                                     imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Info,
                                     contentDescription = null,
-                                    tint = if (isCompleted) CyberGreen else TextMuted,
+                                    tint = if (isCompleted) CyberGreen else ImmersiveAmber,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
                                         text = if (isCompleted) "✓ Study Topic Completed" else "✗ Study Topic Pending",
-                                        color = if (isCompleted) Color.White else TextMuted,
+                                        color = if (isCompleted) Color.White else ImmersiveAmber,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -3727,53 +3744,51 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                 Icon(
                                     imageVector = if (score > 0) Icons.Default.CheckCircle else Icons.Default.Info,
                                     contentDescription = null,
-                                    tint = if (score >= 90) CyberGreen else if (score >= 70) CyberCyan else if (score > 0) ImmersiveRose else TextMuted,
+                                    tint = if (score >= passingScore) CyberGreen else if (score >= 50) ImmersiveAmber else if (score > 0) ImmersiveRose else CyberCyan,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = if (score > 0) "Assessment Score: $score%" else "⚠ Assessment Pending",
-                                        color = if (score > 0) Color.White else TextMuted,
+                                        text = if (score > 0) "Assessment Score: $score%" else "Assessment Pending",
+                                        color = if (score >= passingScore) CyberGreen else if (score >= 50) ImmersiveAmber else if (score > 0) ImmersiveRose else CyberCyan,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
                                         text = when {
-                                            score == 0 -> "Take the Cognitive Checkpoint Assessment to verify skill proficiency."
-                                            score >= 90 -> "Performance: PASS (Elite Proficiency)"
-                                            score >= 70 -> "Performance: AVERAGE (Competent Professional)"
-                                            else -> "Performance: NEEDS IMPROVEMENT"
+                                            score <= 0 -> "Take the Cognitive Checkpoint Assessment to verify skill proficiency."
+                                            score >= passingScore -> "Performance: PASSED (Certified Proficiency)"
+                                            score >= 50 -> "Performance: AVERAGE (Competent Space)"
+                                            else -> "Performance: POOR (Needs Revision)"
                                         },
-                                        color = if (score >= 90) CyberGreen else if (score >= 70) CyberCyan else if (score > 0) ImmersiveRose else TextMuted,
+                                        color = if (score >= passingScore) CyberGreen else if (score >= 50) ImmersiveAmber else if (score > 0) ImmersiveRose else CyberCyan,
                                         fontSize = 10.sp
                                     )
                                 }
                             }
 
-                            if (statusText == "Retained" || statusText == "Revision Due") {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                    Icon(
-                                        imageVector = if (statusText == "Retained") Icons.Default.CheckCircle else Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = if (statusText == "Retained") CyberGreen else ImmersiveRose,
-                                        modifier = Modifier.size(16.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Icon(
+                                    imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (isCompleted) CyberGreen else ImmersiveAmber,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (isCompleted) "Revision Status: Scheduled" else "Revision Status: Not Started",
+                                        color = if (isCompleted) CyberGreen else ImmersiveAmber,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = if (statusText == "Retained") "Retention: RECALL COMPLETED" else "Retention: REVISION DUE",
-                                            color = if (statusText == "Retained") CyberGreen else ImmersiveRose,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = if (statusText == "Retained") "All active recall checkpoints verified." else "A revision is overdue! Select the ARCHIVE tab to perform quick recall queries.",
-                                            color = TextMuted,
-                                            fontSize = 10.sp
-                                        )
-                                    }
+                                    Text(
+                                        text = if (isCompleted) "Spaced repetition intervals set automatically." else "Start study guide exercises to unlock scheduling triggers.",
+                                        color = TextMuted,
+                                        fontSize = 10.sp
+                                    )
                                 }
                             }
                         }
@@ -3877,11 +3892,20 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                 Text("⚙️ EXECUTION ENGINE", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = if (isCompleted) "✓ Study Progress Locked" else "Pending completion mark", 
-                                        color = if (isCompleted) CyberGreen else TextMuted, 
-                                        fontSize = 11.sp
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(if (isCompleted) CyberGreen.copy(alpha = 0.15f) else ImmersiveAmber.copy(alpha = 0.15f))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isCompleted) "COMPLETED" else "PENDING",
+                                            color = if (isCompleted) CyberGreen else ImmersiveAmber,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
                                     Button(
                                         onClick = { 
                                             viewModel.toggleSubtopic(
@@ -3889,7 +3913,7 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                                 "topic_${activeTopic?.id ?: "unknown"}",
                                                 !isCompleted,
                                                 "Self-Paced Daily Study",
-                                                if (!isCompleted) 0 else subProgressObj?.assessmentScore ?: 0
+                                                if (!isCompleted) -1 else 0
                                             ) 
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = if (isCompleted) ImmersiveRose.copy(alpha = 0.2f) else CyberGreen),
@@ -3897,7 +3921,7 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                         modifier = Modifier.height(30.dp)
                                     ) {
                                         Text(
-                                            text = if (isCompleted) "RESET PROGRESS" else "MARK COMPLETED", 
+                                            text = if (isCompleted) "UNMARK COMPLETED" else "MARK COMPLETED", 
                                             color = if (isCompleted) Color.White else Color.Black, 
                                             fontSize = 9.sp, 
                                             fontWeight = FontWeight.Bold,
@@ -3956,7 +3980,7 @@ fun CareerHub(viewModel: JeevanViewModel) {
                                     modifier = Modifier.fillMaxWidth().height(44.dp)
                                 ) {
                                     Text(
-                                        text = if (!isCompleted) "🔒 LOCKED UNTIL STUDY COMPLETION" else if (isPassed) "VERIFIED MATCH INTERVIEW PASSED (${subProgressObj?.assessmentScore}%) • PRACTICE AGAIN" else "🚀 LAUNCH COGNITIVE INTERVIEW CHECK", 
+                                        text = if (!isCompleted) "LOCKED" else if (isPassed) "START ASSESSMENT (Passed: ${subProgressObj?.assessmentScore}%)" else "START ASSESSMENT", 
                                         color = if (isCompleted) Color.Black else TextMuted, 
                                         fontWeight = FontWeight.Bold, 
                                         fontSize = 11.sp
@@ -4010,7 +4034,7 @@ fun CareerHub(viewModel: JeevanViewModel) {
 
                 item {
                     val passedCount = subList.count { it.isCompleted && it.assessmentScore >= passingScore }
-                    val averageScore = if (subList.any { it.isCompleted }) subList.filter { it.isCompleted }.map { it.assessmentScore }.average() else 75.0
+                    val averageScore = if (subList.any { it.isCompleted && it.assessmentScore > 0 }) subList.filter { it.isCompleted && it.assessmentScore > 0 }.map { it.assessmentScore }.average() else 75.0
                     val streakBonus = (userProfile.careerStreak * 2).coerceAtMost(15)
                     val solvedBonus = (puzzlesSolved * 3).coerceAtMost(15)
                     val jobReadinessScore = ((averageScore * 0.5) + (passedCount * 3.5) + streakBonus + solvedBonus).coerceIn(0.0, 100.0).toInt()
@@ -4043,18 +4067,18 @@ fun CareerHub(viewModel: JeevanViewModel) {
                 }
 
                 item {
-                    val completedAws = subList.count { it.parentTopicId == "aws" && it.isCompleted }
-                    val completedDocker = subList.count { it.parentTopicId == "docker" && it.isCompleted }
-                    val completedK8s = subList.count { it.parentTopicId == "kubernetes" && it.isCompleted }
+                    val completedAws = subList.count { getTopicCategory(it.parentTopicId) == "aws" && it.isCompleted }
+                    val completedDocker = subList.count { getTopicCategory(it.parentTopicId) == "docker" && it.isCompleted }
+                    val completedK8s = subList.count { getTopicCategory(it.parentTopicId) == "kubernetes" && it.isCompleted }
                     Card(colors = CardDefaults.cardColors(containerColor = ImmersiveSurface), border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.08f))) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text("COGNITIVE SKILL LEVELS ARCHITECTURE", color = CyberCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(10.dp))
-                            SkillProficiencyBar("AWS Cloud Hosting Space", completedAws, 4, if (completedAws >= 4) "EXPERT 🌟" else if (completedAws >= 2) "ADVANCED" else "BEGINNER 🌱", CyberCyan)
+                            SkillProficiencyBar("AWS Cloud Hosting Space", completedAws, 84, if (completedAws >= 40) "EXPERT 🌟" else if (completedAws >= 15) "ADVANCED" else "BEGINNER 🌱", CyberCyan)
                             Spacer(modifier = Modifier.height(10.dp))
-                            SkillProficiencyBar("Docker Containers Host", completedDocker, 4, if (completedDocker >= 4) "EXPERT 🌟" else if (completedDocker >= 2) "ADVANCED" else "BEGINNER 🌱", CyberGreen)
+                            SkillProficiencyBar("Docker Containers Host", completedDocker, 49, if (completedDocker >= 25) "EXPERT 🌟" else if (completedDocker >= 10) "ADVANCED" else "BEGINNER 🌱", CyberGreen)
                             Spacer(modifier = Modifier.height(10.dp))
-                            SkillProficiencyBar("Kubernetes Orchestrator SRE", completedK8s, 3, if (completedK8s >= 3) "EXPERT 🌟" else if (completedK8s >= 1) "ADVANCED" else "BEGINNER 🌱", CyberPurple)
+                            SkillProficiencyBar("Kubernetes Orchestrator SRE", completedK8s, 35, if (completedK8s >= 18) "EXPERT 🌟" else if (completedK8s >= 6) "ADVANCED" else "BEGINNER 🌱", CyberPurple)
                         }
                     }
                 }
@@ -4521,25 +4545,31 @@ fun CareerHub(viewModel: JeevanViewModel) {
 }
 }
 
-fun getLearningStatus(progress: com.example.data.entity.SubtopicProgress?): String {
+fun getTopicCategory(parentTopicId: String): String {
+    val idStr = parentTopicId.substringAfter("topic_").trim()
+    val id = idStr.toIntOrNull() ?: 0
+    return when {
+        parentTopicId == "linux" || id in 1..3 -> "linux"
+        parentTopicId == "python" || id == 4 -> "python"
+        parentTopicId == "aws" || id in 5..14 || id == 27 || id == 28 -> "aws"
+        parentTopicId == "docker" || id in 15..21 -> "docker"
+        parentTopicId == "kubernetes" || id in 22..26 -> "kubernetes"
+        else -> parentTopicId
+    }
+}
+
+fun getLearningStatus(progress: com.example.data.entity.SubtopicProgress?, passingScore: Int = 70): String {
     if (progress == null || !progress.isCompleted) {
         return "Pending"
     }
-    
     val score = progress.assessmentScore
-    val reason = progress.reasonNotCompleted ?: ""
-    
-    val compTime = progress.completionDate ?: System.currentTimeMillis()
-    val nextDay = compTime + (24 * 60 * 60 * 1000L)
-    val now = System.currentTimeMillis()
-
+    if (score == -1 || score == 0) {
+        return "Completed"
+    }
     return when {
-        reason == "RETAINED" -> "Retained"
-        now >= nextDay -> "Revision Due"
-        score == 0 -> "Assessment Pending"
-        score >= 90 -> "Pass"
-        score >= 70 -> "Average"
-        else -> "Needs Improvement"
+        score >= passingScore -> "Passed"
+        score >= 50 && score < passingScore -> "Average"
+        else -> "Poor"
     }
 }
 

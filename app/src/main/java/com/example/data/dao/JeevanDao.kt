@@ -56,6 +56,9 @@ interface JeevanDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubtopicProgress(subtopic: SubtopicProgress)
 
+    @Query("DELETE FROM subtopic_progress")
+    suspend fun deleteAllSubtopicProgress()
+
     // --- News Bookmarks Queries ---
     @Query("SELECT * FROM news_bookmarks ORDER BY savedAt DESC")
     fun getAllNewsBookmarksFlow(): Flow<List<NewsBookmark>>
