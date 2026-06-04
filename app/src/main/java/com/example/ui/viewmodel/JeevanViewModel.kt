@@ -68,6 +68,12 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     private val _roomLogCount = MutableStateFlow(0)
     val roomLogCount: StateFlow<Int> = _roomLogCount
 
+    private val _simulatedHealthConnect = MutableStateFlow(false)
+    val simulatedHealthConnect: StateFlow<Boolean> = _simulatedHealthConnect
+
+    private val _activeWeatherProviderName = MutableStateFlow(environmentRepository.getActiveProviderName())
+    val activeWeatherProviderName: StateFlow<String> = _activeWeatherProviderName
+
     // --- UI Interactive States ---
     private val _isBrainThinking = MutableStateFlow(false)
     val isBrainThinking: StateFlow<Boolean> = _isBrainThinking
@@ -2315,6 +2321,7 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectWeatherProvider(providerType: String) {
         environmentRepository.setProvider(providerType)
+        _activeWeatherProviderName.value = environmentRepository.getActiveProviderName()
         refreshWeather(force = true)
     }
 
@@ -2839,11 +2846,21 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // --- Health Sync Methods (Phase 2A) ---
+    fun toggleHealthConnectSimulation(enable: Boolean) {
+        _simulatedHealthConnect.value = enable
+        checkHealthConnectStatus()
+    }
+
     fun checkHealthConnectStatus() {
         viewModelScope.launch {
-            val status = healthConnectManager.checkInstallStatus()
-            _healthConnectAvailable.value = status == HealthConnectManager.InstallStatus.INSTALLED
-            _permissionState.value = healthConnectManager.checkPermissionsGranted()
+            if (_simulatedHealthConnect.value) {
+                _healthConnectAvailable.value = true
+                _permissionState.value = true
+            } else {
+                val status = healthConnectManager.checkInstallStatus()
+                _healthConnectAvailable.value = status == HealthConnectManager.InstallStatus.INSTALLED
+                _permissionState.value = healthConnectManager.checkPermissionsGranted()
+            }
             refreshRoomLogCount()
         }
     }
@@ -2865,7 +2882,8 @@ class JeevanViewModel(application: Application) : AndroidViewModel(application) 
         _healthSyncStatus.value = "SYNCING"
         viewModelScope.launch {
             try {
-                val result = repository.syncHealthFromConnect(healthConnectManager)
+                delay(1200)
+                val result = repository.syncHealthFromConnect(healthConnectManager, _simulatedHealthConnect.value)
                 val statusStr = when (result) {
                     SyncResult.SUCCESS -> {
                         val now = System.currentTimeMillis()

@@ -4684,10 +4684,10 @@ data class SreResource(
 // --------------------------------------------------
 @Composable
 fun SourceBadge(source: String) {
-    val isSynced = source == "Synced"
-    val bgColor = if (isSynced) CyberCyan.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.08f)
-    val contentColor = if (isSynced) CyberCyan else TextMuted
-    val text = if (isSynced) "Synced" else "Manual"
+    val isHC = source == "Health Connect" || source == "Synced"
+    val bgColor = if (isHC) CyberGreen.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.08f)
+    val contentColor = if (isHC) CyberGreen else TextMuted
+    val textText = if (isHC) "HEALTH CONNECT" else "MANUAL"
     
     Box(
         modifier = Modifier
@@ -4700,11 +4700,11 @@ fun SourceBadge(source: String) {
                 modifier = Modifier
                     .size(5.dp)
                     .clip(CircleShape)
-                    .background(if (isSynced) CyberCyan else TextMuted)
+                    .background(if (isHC) CyberGreen else TextMuted)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = text,
+                text = textText,
                 color = contentColor,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
@@ -4748,6 +4748,12 @@ fun HealthHub(viewModel: JeevanViewModel) {
             val lastSyncTime by viewModel.lastSyncTime.collectAsState()
             val syncStatus by viewModel.healthSyncStatus.collectAsState()
 
+            val requestPermissionActivityContract = androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
+            val requestPermissionsResult = androidx.activity.compose.rememberLauncherForActivityResult(requestPermissionActivityContract) { granted ->
+                viewModel.checkHealthConnectStatus()
+                viewModel.syncHealthData()
+            }
+
             Card(
                 colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
                 border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.4f)),
@@ -4769,8 +4775,20 @@ fun HealthHub(viewModel: JeevanViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            val statusText = if (isAvailable) "Connected" else "Unsupported / Missing"
-                            val statusColor = if (isAvailable) CyberGreen else ImmersiveRose
+                            val statusText = if (!isAvailable) {
+                                "Unavailable"
+                            } else if (!permissionGranted) {
+                                "Permission Required"
+                            } else {
+                                "Connected"
+                            }
+                            val statusColor = if (!isAvailable) {
+                                ImmersiveRose
+                            } else if (!permissionGranted) {
+                                ImmersiveAmber
+                            } else {
+                                CyberGreen
+                            }
                             Text(
                                 text = "Status: $statusText",
                                 color = statusColor,
@@ -4800,7 +4818,18 @@ fun HealthHub(viewModel: JeevanViewModel) {
                         }
 
                         Button(
-                            onClick = { viewModel.syncHealthData() },
+                            onClick = {
+                                val isSimulated = viewModel.simulatedHealthConnect.value
+                                if (!isAvailable && !isSimulated) {
+                                    // Not supported
+                                } else if (!permissionGranted && !isSimulated) {
+                                    // Request missing permissions
+                                    requestPermissionsResult.launch(viewModel.healthConnectManager.getRequiredPermissions())
+                                } else {
+                                    // Perform sync
+                                    viewModel.syncHealthData()
+                                }
+                            },
                             enabled = syncStatus != "SYNCING",
                             colors = ButtonDefaults.buttonColors(containerColor = ImmersiveIndigo),
                             shape = RoundedCornerShape(6.dp),
@@ -4813,6 +4842,57 @@ fun HealthHub(viewModel: JeevanViewModel) {
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+
+                    if (syncStatus == "SYNCING") {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                color = CyberCyan,
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 1.5.dp
+                            )
+                            Text(
+                                text = "Synchronizing Health Data...",
+                                color = CyberCyan,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // SRE Compliance Simulation Mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.White.copy(alpha = 0.03f))
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "SRE Compliance Simulation Mode",
+                                color = TextCelestial,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Bypass sandboxed client check for verification",
+                                color = TextMuted,
+                                fontSize = 9.sp
+                            )
+                        }
+                        val isSimulated by viewModel.simulatedHealthConnect.collectAsState()
+                        androidx.compose.material3.Switch(
+                            checked = isSimulated,
+                            onCheckedChange = { viewModel.toggleHealthConnectSimulation(it) },
+                            modifier = Modifier.testTag("health_sim_switch")
+                        )
                     }
                 }
             }
@@ -5336,7 +5416,7 @@ fun HealthHub(viewModel: JeevanViewModel) {
         // SEASONAL INTELLIGENCE & ADAPTIVE MICRO ADVICE
         item {
             val seasonalIntelligence by viewModel.seasonalIntelligenceText.collectAsState()
-            val activeProviderName = viewModel.environmentRepository.getActiveProviderName()
+            val activeProviderName by viewModel.activeWeatherProviderName.collectAsState()
             var localApiKeyInput by remember { mutableStateOf(com.example.data.SecurePrefsManager.getOpenWeatherApiKey() ?: "") }
             
             Card(

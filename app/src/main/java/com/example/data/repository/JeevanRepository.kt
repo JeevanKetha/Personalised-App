@@ -552,13 +552,15 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
         jeevanDao.deleteSubtopic(subtopic)
     }
 
-    suspend fun syncHealthFromConnect(healthConnectManager: HealthConnectManager): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun syncHealthFromConnect(healthConnectManager: HealthConnectManager, forceMock: Boolean = false): SyncResult = withContext(Dispatchers.IO) {
         try {
             val status = healthConnectManager.checkInstallStatus()
-            if (status != HealthConnectManager.InstallStatus.INSTALLED) {
+            val available = (status == HealthConnectManager.InstallStatus.INSTALLED) || forceMock
+            if (!available) {
                 return@withContext SyncResult.UNAVAILABLE
             }
-            if (!healthConnectManager.checkPermissionsGranted()) {
+            val permissionsGranted = healthConnectManager.checkPermissionsGranted() || forceMock
+            if (!permissionsGranted) {
                 return@withContext SyncResult.PERMISSION_REQUIRED
             }
 
@@ -578,9 +580,9 @@ class JeevanRepository(private val jeevanDao: JeevanDao) {
                 stepsCount = steps,
                 sleepMinutes = sleepMin,
                 averageHeartRate = heartRate,
-                stepsSource = "Synced",
-                sleepSource = "Synced",
-                heartRateSource = "Synced"
+                stepsSource = "Health Connect",
+                sleepSource = "Health Connect",
+                heartRateSource = "Health Connect"
             )
             val withRecovery = recalculateAndSaveTodayRecoveryScore(updatedLog)
             jeevanDao.insertHealthLog(withRecovery)
